@@ -30,11 +30,11 @@ namespace SimpleExtractor.Json
         [JsonProperty("angle")]
         public int Angle { get; set; }
 
-        [JsonProperty("layers")]
+        [JsonProperty("layers", NullValueHandling = NullValueHandling.Ignore)]
         public Dictionary<string, JsonLayer>? Layers { get; set; }
 
-        [JsonProperty("directions")]
-        public Dictionary<string, object>? Directions { get; set; }
+        [JsonProperty("directions", NullValueHandling = NullValueHandling.Ignore)]
+        public Dictionary<string, JsonDirection>? Directions { get; set; }
 
         [JsonProperty("colors", NullValueHandling = NullValueHandling.Ignore)]
         public Dictionary<string, List<JsonColor>>? Colors { get; set; }
@@ -42,6 +42,17 @@ namespace SimpleExtractor.Json
         [JsonProperty("animations", NullValueHandling = NullValueHandling.Ignore)]
         public Dictionary<string, JsonAnimation>? Animations { get; set; }
     }
+    
+    // <-- NUEVA CLASE PARA REPRESENTAR DATOS DENTRO DE UNA DIRECCIÓN -->
+    public class JsonDirection
+    {
+        [JsonProperty("id")]
+        public int Id { get; set; }
+
+        [JsonProperty("layers", NullValueHandling = NullValueHandling.Ignore)]
+        public Dictionary<string, JsonLayer>? Layers { get; set; }
+    }
+
 
     public class JsonLayer
     {

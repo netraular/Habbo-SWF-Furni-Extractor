@@ -211,36 +211,40 @@ namespace SimpleExtractor
                             LayerCount = int.TryParse(vizNode.Attributes?["layerCount"]?.InnerText, out int lc) ? lc : 0,
                             Angle = int.TryParse(vizNode.Attributes?["angle"]?.InnerText, out int ang) ? ang : 0,
                             Layers = new Dictionary<string, JsonLayer>(),
-                            Directions = new Dictionary<string, object>(),
+                            Directions = new Dictionary<string, JsonDirection>(),
                             Colors = new Dictionary<string, List<JsonColor>>(),
                             Animations = new Dictionary<string, JsonAnimation>()
                         };
 
-                        // Layers
+                        // Layers (nivel superior)
                         var layerNodes = vizNode.SelectNodes("layers/layer");
                         if (layerNodes != null) foreach (XmlNode layerNode in layerNodes)
                         {
                             if (int.TryParse(layerNode.Attributes?["id"]?.InnerText, out int id))
                             {
-                                viz.Layers[id.ToString()] = new JsonLayer
-                                {
-                                    Id = id,
-                                    Z = int.TryParse(layerNode.Attributes?["z"]?.InnerText, out int z) ? z : null,
-                                    Ink = layerNode.Attributes?["ink"]?.InnerText,
-                                    Alpha = int.TryParse(layerNode.Attributes?["alpha"]?.InnerText, out int alpha) ? alpha : null,
-                                    IgnoreMouse = layerNode.Attributes?["ignoreMouse"]?.InnerText == "1" ? true : null
-                                };
+                                viz.Layers[id.ToString()] = ParseJsonLayer(layerNode);
                             }
                         }
 
-                        // Directions
+                        // Directions (puede contener capas anidadas)
                         var dirNodes = vizNode.SelectNodes("directions/direction");
                         if (dirNodes != null) foreach (XmlNode dirNode in dirNodes)
                         {
-                            string? dirId = dirNode.Attributes?["id"]?.InnerText;
-                            if (dirId != null)
+                            if (int.TryParse(dirNode.Attributes?["id"]?.InnerText, out int dirId))
                             {
-                                viz.Directions[dirId] = new List<object>();
+                                var jsonDir = new JsonDirection { Id = dirId, Layers = new Dictionary<string, JsonLayer>() };
+                                var dirLayerNodes = dirNode.SelectNodes("layer");
+                                if (dirLayerNodes != null)
+                                {
+                                    foreach (XmlNode dirLayerNode in dirLayerNodes)
+                                    {
+                                        if (int.TryParse(dirLayerNode.Attributes?["id"]?.InnerText, out int layerId))
+                                        {
+                                            jsonDir.Layers[layerId.ToString()] = ParseJsonLayer(dirLayerNode);
+                                        }
+                                    }
+                                }
+                                viz.Directions[dirId.ToString()] = jsonDir;
                             }
                         }
                         
@@ -301,11 +305,23 @@ namespace SimpleExtractor
                 }
             }
             
-            // <-- ÚNICO CAMBIO: De Formatting.None a Formatting.Indented -->
             var jsonSettings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore, Formatting = Newtonsoft.Json.Formatting.Indented };
             string json = JsonConvert.SerializeObject(furniData, jsonSettings);
             File.WriteAllText(Path.Combine(outputDir, "furni.json"), json);
             Console.WriteLine("      -> Archivo furni.json generado correctamente.");
+        }
+
+        // <-- NUEVO MÉTODO HELPER PARA EVITAR REPETIR CÓDIGO -->
+        private static JsonLayer ParseJsonLayer(XmlNode layerNode)
+        {
+            return new JsonLayer
+            {
+                Id = int.Parse(layerNode.Attributes!["id"]!.InnerText),
+                Z = int.TryParse(layerNode.Attributes?["z"]?.InnerText, out int z) ? z : null,
+                Ink = layerNode.Attributes?["ink"]?.InnerText,
+                Alpha = int.TryParse(layerNode.Attributes?["alpha"]?.InnerText, out int alpha) ? alpha : null,
+                IgnoreMouse = layerNode.Attributes?["ignoreMouse"]?.InnerText == "1" ? true : null
+            };
         }
 
         private static void WriteImage(DefineBitsLossless2Tag image, string path)

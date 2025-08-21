@@ -46,19 +46,37 @@ namespace Chroma
                 Layer = (data[1].ToUpper().FirstOrDefault() - 64) - 1;
                 Direction = chromaFurniture.IsIcon ? 0 : int.Parse(data[2]);
                 Frame = chromaFurniture.IsIcon ? 0 : int.Parse(data[3]);
+                
                 var xmlData = FileUtil.SolveXmlFile(chromaFurniture.XmlDirectory, "visualization");
                 if (xmlData == null) return false;
+                
                 string size = chromaFurniture.IsSmallFurni ? "32" : "64";
 
-                // CAMBIOS AQUÍ: Añadidos operadores ?. para acceso seguro y eliminar advertencias
+                // <-- CAMBIO IMPORTANTE: LÓGICA DE FALLBACK AÑADIDA -->
+                // 1. Intentar encontrar la capa en la sección general de capas.
                 var layerNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{size}']/layers/layer[@id='{this.Layer}']");
-                if (layerNode?.Attributes?["z"]?.InnerText != null)
+
+                // 2. Si no se encuentra, buscarla dentro de la dirección específica (fallback).
+                if (layerNode == null)
                 {
-                    Z = int.Parse(layerNode.Attributes["z"]!.InnerText);
+                    layerNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{size}']/directions/direction[@id='{chromaFurniture.RenderDirection}']/layer[@id='{this.Layer}']");
                 }
+                
+                // Ahora, procesar el nodo de capa si se encontró en alguna de las rutas.
+                if (layerNode != null)
+                {
+                    if (layerNode.Attributes?["z"]?.InnerText != null)
+                    {
+                        Z = int.Parse(layerNode.Attributes["z"]!.InnerText);
+                    }
+                    if (layerNode.Attributes?["ink"]?.InnerText != null) Ink = layerNode.Attributes["ink"]!.InnerText;
+                    if (layerNode.Attributes?["alpha"]?.InnerText != null) Alpha = int.Parse(layerNode.Attributes["alpha"]!.InnerText);
+                    if (layerNode.Attributes?["ignoreMouse"]?.InnerText != null) IgnoreMouse = layerNode.Attributes["ignoreMouse"]!.InnerText == "1";
+                }
+
+                // La Z se calcula para asegurar el orden correcto.
                 Z = (Z * 1000) + Layer;
-                if (layerNode?.Attributes?["ink"]?.InnerText != null) Ink = layerNode.Attributes["ink"]!.InnerText;
-                if (layerNode?.Attributes?["alpha"]?.InnerText != null) Alpha = int.Parse(layerNode.Attributes["alpha"]!.InnerText);
+                
                 if (chromaFurniture.ColourId > -1)
                 {
                     var colorNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{size}']/colors/color[@id='{chromaFurniture.ColourId}']/colorLayer[@id='{Layer}']");
