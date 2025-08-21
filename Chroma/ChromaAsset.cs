@@ -50,16 +50,17 @@ namespace Chroma
                 var xmlData = FileUtil.SolveXmlFile(chromaFurniture.XmlDirectory, "visualization");
                 if (xmlData == null) return false;
                 
-                string size = chromaFurniture.IsSmallFurni ? "32" : "64";
+                // Este tamaño se usa para buscar propiedades de capa generales (z, ink, etc.)
+                string sizeForLayerProperties = chromaFurniture.IsSmallFurni ? "32" : "64";
 
                 // <-- CAMBIO IMPORTANTE: LÓGICA DE FALLBACK AÑADIDA -->
                 // 1. Intentar encontrar la capa en la sección general de capas.
-                var layerNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{size}']/layers/layer[@id='{this.Layer}']");
+                var layerNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{sizeForLayerProperties}']/layers/layer[@id='{this.Layer}']");
 
                 // 2. Si no se encuentra, buscarla dentro de la dirección específica (fallback).
                 if (layerNode == null)
                 {
-                    layerNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{size}']/directions/direction[@id='{chromaFurniture.RenderDirection}']/layer[@id='{this.Layer}']");
+                    layerNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{sizeForLayerProperties}']/directions/direction[@id='{chromaFurniture.RenderDirection}']/layer[@id='{this.Layer}']");
                 }
                 
                 // Ahora, procesar el nodo de capa si se encontró en alguna de las rutas.
@@ -79,7 +80,13 @@ namespace Chroma
                 
                 if (chromaFurniture.ColourId > -1)
                 {
-                    var colorNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{size}']/colors/color[@id='{chromaFurniture.ColourId}']/colorLayer[@id='{Layer}']");
+                    // <-- ***** CORRECCIÓN CLAVE ***** -->
+                    // Determinar el tamaño correcto para la búsqueda de color.
+                    // Si es un icono, SIEMPRE buscar en size="1".
+                    // Si no, usar el tamaño del mueble (32 o 64).
+                    string sizeForColorLookup = chromaFurniture.IsIcon ? "1" : sizeForLayerProperties;
+
+                    var colorNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{sizeForColorLookup}']/colors/color[@id='{chromaFurniture.ColourId}']/colorLayer[@id='{Layer}']");
                     if (colorNode?.Attributes?["color"]?.InnerText != null)
                     {
                         ColourCode = colorNode.Attributes["color"]!.InnerText;

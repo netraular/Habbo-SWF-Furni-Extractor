@@ -96,14 +96,9 @@ namespace SimpleExtractor
                             }
                         }
 
-                        if (name.Contains("_icon_a"))
-                        {
-                            string iconSourcePath = Path.Combine(assetsDirectory, name + ".png");
-                            if (File.Exists(iconSourcePath))
-                            {
-                                File.Copy(iconSourcePath, Path.Combine(outputFurniDirectory, furniName + "_icon.png"), true);
-                            }
-                        }
+                        // <-- CAMBIO: Eliminada la lógica de copia de icono -->
+                        // La generación del icono ahora se hace en Program.cs para poder aplicar colores.
+                        // Ya no se copia el asset base "_icon_a".
                     }
                 }
             }
@@ -114,7 +109,8 @@ namespace SimpleExtractor
 
             return true;
         }
-
+        
+        // El resto del archivo (GenerateFurniJson, WriteImage) permanece sin cambios...
         private static void GenerateFurniJson(string furniName, string outputDir, string xmlDir)
         {
             var furniData = new JsonFurniData
@@ -310,8 +306,7 @@ namespace SimpleExtractor
             File.WriteAllText(Path.Combine(outputDir, "furni.json"), json);
             Console.WriteLine("      -> Archivo furni.json generado correctamente.");
         }
-
-        // <-- NUEVO MÉTODO HELPER PARA EVITAR REPETIR CÓDIGO -->
+        
         private static JsonLayer ParseJsonLayer(XmlNode layerNode)
         {
             return new JsonLayer

@@ -30,7 +30,7 @@ namespace Chroma
         public int CANVAS_WIDTH = 500;
         public int CANVAS_HEIGHT = 500;
         private bool CropImage = true;
-        public bool IsIcon;
+        public bool IsIcon; // Esta propiedad ya existía, ahora la inicializaremos.
         public SortedDictionary<int, ChromaAnimation> Animations;
         public int HighestAnimationLayer;
         public int MaxStates { get; private set; }
@@ -39,18 +39,21 @@ namespace Chroma
         public string XmlDirectory => Path.Combine(OutputDirectory, "xml");
         
         // --- CONSTRUCTOR ---
-        public ChromaFurniture(string inputFileName, bool isSmallFurni, int renderState, int renderDirection, int colourId = -1)
+        // <-- CAMBIO: Añadido el parámetro 'isIcon' -->
+        public ChromaFurniture(string inputFileName, bool isSmallFurni, int renderState, int renderDirection, int colourId = -1, bool isIcon = false)
         {
             this.fileName = inputFileName;
             this.IsSmallFurni = isSmallFurni;
             this.Assets = new List<ChromaAsset>();
             this.RenderState = renderState;
             this.RenderDirection = renderDirection;
-            this.ColourId = colourId; // Importante: ahora se usa el colourId
+            this.ColourId = colourId;
             this.Sprite = Path.GetFileNameWithoutExtension(inputFileName);
             this.Animations = new SortedDictionary<int, ChromaAnimation>();
+            this.IsIcon = isIcon; // <-- CAMBIO: Se asigna el valor del parámetro.
         }
 
+        // El resto del archivo permanece sin cambios...
         // --- NUEVO MÉTODO DE DETECCIÓN DE COLOR ---
         public List<int> GetAvailableColorIds()
         {
@@ -94,6 +97,7 @@ namespace Chroma
                 var y = int.Parse(assetNode.Attributes?["y"]?.InnerText ?? "0");
                 string? imageName = assetNode.Attributes?["name"]?.InnerText;
                 if (string.IsNullOrEmpty(imageName)) continue;
+                // Esta lógica ahora funcionará correctamente gracias al constructor
                 if (!IsIcon && imageName.Contains("_icon_")) continue;
                 if (IsIcon && !imageName.Contains("_icon_")) continue;
                 string? source = assetNode.Attributes?["source"]?.InnerText;
@@ -112,8 +116,10 @@ namespace Chroma
         private List<ChromaAsset> CreateBuildQueue()
         {
             if (RenderState > MaxStates) RenderState = 0;
+
             var candidates = Assets.Where(x => x.IsSmall == IsSmallFurni && x.Direction == RenderDirection).ToList();
             var renderFrames = new List<ChromaAsset>();
+
             for (int layer = 0; layer < this.HighestAnimationLayer; layer++)
             {
                 int frameId = 0;
@@ -121,10 +127,18 @@ namespace Chroma
                 {
                     frameId = int.Parse(Animations[layer].States[RenderState].Frames[0]);
                 }
-                var asset = candidates.FirstOrDefault(a => a.Layer == layer && a.Frame == frameId);
-                if (asset != null) renderFrames.Add(asset);
+                
+                // <-- ***** CORRECCIÓN CLAVE ***** -->
+                // Antes: Se usaba FirstOrDefault, lo que solo seleccionaba un asset por capa.
+                // Ahora: Se usa Where y AddRange para añadir TODOS los assets de la capa,
+                // permitiendo renderizar la base y la máscara de color del icono juntas.
+                var assetsForLayer = candidates.Where(a => a.Layer == layer && a.Frame == frameId && !a.Shadow);
+                renderFrames.AddRange(assetsForLayer);
             }
+
+            // Añadimos las sombras al final. Su Z-index (int.MinValue) las pondrá debajo.
             renderFrames.AddRange(candidates.Where(a => a.Shadow));
+            
             return renderFrames.OrderBy(x => x.Z).ToList();
         }
 

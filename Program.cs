@@ -40,6 +40,7 @@ namespace SimpleExtractor
                     FurniExtractor.Parse(swfFile, furniOutputDirectory);
                     
                     var colorDetector = new ChromaFurniture(swfFile, isSmallFurni: false, renderState: 0, renderDirection: 0);
+                    colorDetector.Run(); // Es necesario ejecutar Run para que se carguen los datos del XML
                     var availableColorIds = colorDetector.GetAvailableColorIds();
                     if (!availableColorIds.Any()) availableColorIds.Add(-1); // Añadir un "no color" por defecto
 
@@ -77,6 +78,30 @@ namespace SimpleExtractor
                         string gifFilename = $"{furniName}_animation";
                         if (colorId > -1) gifFilename += $"_color_{colorId}";
                         animFurniture.GenerateAnimationGif(Path.Combine(animationDir, gifFilename + ".gif"));
+
+                        // <-- NUEVO: FASE 4: Renderizado del icono para el color actual -->
+                        Console.WriteLine("   Fase 4: Renderizando icono...");
+                        var iconFurniture = new ChromaFurniture(
+                            swfFile,
+                            isSmallFurni: false, // Los assets de icono no suelen tener versión 32/64, pero se basan en la de 64
+                            renderState: 0,
+                            renderDirection: 0,
+                            colourId: colorId,
+                            isIcon: true // La clave para filtrar solo los assets del icono
+                        );
+                        iconFurniture.Run();
+                        byte[]? iconData = iconFurniture.CreateImage();
+                        
+                        if (iconData != null)
+                        {
+                            string iconFilename = $"{furniName}_icon";
+                            if (colorId > -1)
+                            {
+                                iconFilename += $"_color_{colorId}";
+                            }
+                            // Guardamos el icono en la carpeta principal del furni
+                            File.WriteAllBytes(Path.Combine(furniOutputDirectory, iconFilename + ".png"), iconData);
+                        }
                     }
                 }
                 catch (Exception ex)
