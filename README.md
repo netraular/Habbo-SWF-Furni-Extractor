@@ -4,22 +4,22 @@ SimpleExtractor is a powerful command-line tool for .NET designed to extract, pr
 
 This tool is built for performance, utilizing parallel processing to handle large batches of SWF files quickly and efficiently.
 
-
-*(Example: Stills rendered for a single furniture item with color and shadow variations)*
+![Example of rendered static furniture images with various directions, colors, and shadows](docs/images/furni_stills_showcase.png)
 
 ## Features
 
-- **SWF Decompilation**: Extracts all necessary XML data (`logic`, `visualization`, `assets`) and raw image assets using Flazzy.
-- **Structured JSON Output**: Parses the extracted XML files into a clean, modern `furni.json` file, perfect for use in modern web applications and game clients.
-- **Static Rendering**: Renders furniture in standard directions (0, 2, 4, 6) for a complete view.
-- **Animation Rendering**: Automatically detects the most complex animation sequence and generates high-quality animated GIFs and individual PNG frames.
-- **Full Color & Shadow Handling**: Detects all available furniture colors and renders variations for each. Also provides options to render with or without shadows.
-- **Icon Generation**: Creates a specific icon image for each furniture item and its color variations.
-- **High Performance**: Utilizes parallel processing by default to handle large batches of SWF files in a fraction of the time. A sequential mode is also available for debugging.
-- **Cross-Platform**: Built on .NET 6, it can run on Windows, macOS, and Linux.
+-   **SWF Decompilation**: Extracts all necessary XML data (`logic`, `visualization`, `assets`) and raw image assets using Flazzy.
+-   **Structured JSON Output**: Parses the extracted XML files into a clean, modern `furni.json` file, perfect for use in modern web applications and game clients.
+-   **Static Rendering**: Renders furniture in standard directions (0, 2, 4, 6) for a complete view.
+-   **Animation Rendering**: Automatically detects the most complex animation sequence and generates high-quality animated GIFs and individual PNG frames.
+-   **Full Color & Shadow Handling**: Detects all available furniture colors and renders variations for each. Also provides options to render with or without shadows.
+    *Visualizing multiple color IDs for a single furniture item:*
+    ![Demonstrates automatic detection and rendering of all available color IDs for a furniture item](docs/images/furni_color_variations_showcase.png)
+-   **Icon Generation**: Creates a specific icon image for each furniture item and its color variations.
+-   **High Performance**: Utilizes parallel processing by default to handle large batches of SWF files in a fraction of the time. A sequential mode is also available for debugging.
+-   **Cross-Platform**: Built on .NET 6, it can run on Windows, macOS, and Linux.
 
-
-*(Example: Automatically generated animation)*
+![Example of an automatically generated furniture animation GIF](docs/images/rare_dragonlamp_animation_color_2_no_sd.gif)
 
 ## Getting Started
 
@@ -27,8 +27,8 @@ Follow these instructions to get the project up and running on your local machin
 
 ### Prerequisites
 
-- [.NET 6.0 SDK](https://dotnet.microsoft.com/download/dotnet/6.0) or higher.
-- `Flazzy.dll` library. This project is configured to look for it in a `LIB/` folder.
+-   [.NET 6.0 SDK](https://dotnet.microsoft.com/download/dotnet/6.0) or higher.
+-   `Flazzy.dll` library. This project is configured to look for it in a `LIB/` folder.
 
 ### Setup
 
@@ -39,12 +39,12 @@ Follow these instructions to get the project up and running on your local machin
     ```
 
 2.  **Add Dependencies:**
-    - Create a folder named `LIB` in the root of the project directory.
-    - Place your `Flazzy.dll` file inside the `LIB` folder.
+    -   Create a folder named `LIB` in the root of the project directory.
+    -   Place your `Flazzy.dll` file inside the `LIB` folder.
 
 3.  **Add Furniture Files:**
-    - Create a folder named `swfs` in the root of the project directory.
-    - Place all your `.swf` furniture files inside the `swfs` folder.
+    -   Create a folder named `swfs` in the root of the project directory.
+    -   Place all your `.swf` furniture files inside the `swfs` folder.
 
 4.  **Build the project:**
     ```sh
@@ -68,46 +68,55 @@ dotnet run --project SimpleExtractor.csproj --sequential
 
 ### Command-Line Options
 
-- `--verbose`: Displays all detailed logs during the extraction and rendering process. By default, only summary information is shown.
-- `--sequential`: Disables parallel processing and processes SWF files one by one. Useful for debugging or if mixed-up console logs are an issue.
-- `--help`: Shows the help message with all available options.
+-   `--verbose`: Displays all detailed logs during the extraction and rendering process. By default, only summary information is shown.
+-   `--sequential`: Disables parallel processing and processes SWF files one by one. Useful for debugging or if mixed-up console logs are an issue.
+-   `--help`: Shows the help message with all available options.
 
 ## Output Structure
 
-For each `.swf` file processed, a corresponding folder is created in the `output` directory. This folder contains all the extracted and generated assets in an organized structure.
-
-
-*(Example: The generated folder structure for a single item)*
+For each `.swf` file processed, a corresponding folder is created in the `output` directory. This folder contains all the extracted and generated assets in an organized structure, resembling the following:
 
 ```
-📂 [furni_name]
-  ├─ 📂 assets
-  │  └─ [furni_name]_32_a_0_0.png
-  ├─ 📂 animations
-  │  ├─ 📂 frames
-  │  └─ [furni_name]_animation.gif
-  ├─ 📂 rendered
-  │  └─ [furni_name]_dir_0.png
-  ├─ 📂 xml
-  │  └─ assets.xml
-  ├─ 📜 furni.json
-  └─ 🖼️ [furni_name]_icon.png
+📂 output/
+└── 📂 [furni_name]/
+    ├── 📂 assets/
+    │   └── 🖼️ [furni_name]_32_a_0_0.png
+    │   └── ... (all raw png assets)
+    ├── 📂 animations/
+    │   ├── 📂 frames/
+    │   │   └── 🖼️ [furni_name]_animation_frame_00.png
+    │   │   └── ... (individual animation frames)
+    │   ├── 🎬 [furni_name]_animation.gif
+    │   ├── 🎬 [furni_name]_animation_color_1.gif
+    │   └── ... (all animated gifs)
+    ├── 📂 rendered/
+    │   ├── 🖼️ [furni_name]_dir_0.png
+    │   ├── 🖼️ [furni_name]_dir_0_no_sd.png
+    │   └── ... (all static renders)
+    ├── 📂 xml/
+    │   ├── 📄 assets.xml
+    │   ├── 📄 logic.xml
+    │   └── 📄 visualization.xml
+    ├── 📄 furni.json
+    ├── 🖼️ [furni_name]_icon.png
+    └── 🖼️ [furni_name]_icon_color_1.png
+    └── ... (all icons, with color variations)
 ```
 
-- **`assets/`**: Contains all the raw, individual PNG layers extracted from the SWF.
-- **`xml/`**: Contains the original data XML files (`assets.xml`, `logic.xml`, `visualization.xml`).
-- **`rendered/`**: Contains the final composed static PNG images for different directions, colors, and shadow options.
-- **`animations/`**: Contains the generated animated GIFs and a `frames/` subfolder with each frame saved as a separate PNG.
-- **`furni.json`**: A single, consolidated JSON file containing all logic, visualization, and asset data in a structured format.
-- **`*_icon.png`**: The generated icon for the furniture, including color variations.
+-   **`assets/`**: Contains all the raw, individual PNG layers extracted from the SWF.
+-   **`xml/`**: Contains the original data XML files (`assets.xml`, `logic.xml`, `visualization.xml`).
+-   **`rendered/`**: Contains the final composed static PNG images for different directions, colors, and shadow options.
+-   **`animations/`**: Contains the generated animated GIFs and a `frames/` subfolder with each frame saved as a separate PNG.
+-   **`furni.json`**: A single, consolidated JSON file containing all logic, visualization, and asset data in a structured format.
+-   **`*_icon.png`**: The generated icon for the furniture, including color variations.
 
 ## Acknowledgements
 
 This project is heavily inspired by and based on the rendering logic from:
-- **[Quackster/Chroma](https://github.com/Quackster/Chroma)**
+-   **[Quackster/Chroma](https://github.com/Quackster/Chroma)**
 
 Another similar and excellent project in this space is:
-- **[scottstamp/FurniExtractor](https://github.com/scottstamp/FurniExtractor)**
+-   **[scottstamp/FurniExtractor](https://github.com/scottstamp/FurniExtractor)**
 
 Special thanks to the creators of these tools for paving the way.
 
