@@ -87,7 +87,7 @@ For each `.swf` file processed, a corresponding folder is created in the `output
     │   │   └── 🖼️ [furni_name]_animation_frame_00.png
     │   │   └── ... (individual animation frames)
     │   ├── 🎬 [furni_name]_animation.gif
-    │   ├── 🎬 [furni_name]_animation_color_1.gif
+    │   ├── 🎬 [furni_name]_animation_1.gif
     │   └── ... (all animated gifs)
     ├── 📂 rendered/
     │   ├── 🖼️ [furni_name]_dir_0.png

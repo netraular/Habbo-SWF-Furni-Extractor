@@ -112,7 +112,7 @@ namespace SimpleExtractor
                             if (imageData != null)
                             {
                                 string filename = $"{furniName}_dir_{direction}";
-                                if (colorId > -1) filename += $"_color_{colorId}";
+                                if (colorId > -1) filename += $"_{colorId}";
                                 if (!renderWithShadows) filename += "_no_sd";
                                 File.WriteAllBytes(Path.Combine(renderedDir, filename + ".png"), imageData);
                             }
@@ -130,7 +130,7 @@ namespace SimpleExtractor
                         masterFurniture.IsIcon = false;
 
                         string gifFilenameBase = $"{furniName}_animation";
-                        if (colorId > -1) gifFilenameBase += $"_color_{colorId}";
+                        if (colorId > -1) gifFilenameBase += $"_{colorId}";
                         if (!renderWithShadows) gifFilenameBase += "_no_sd";
                         string gifFullPath = Path.Combine(animationDir, gifFilenameBase + ".gif");
 
@@ -151,7 +151,7 @@ namespace SimpleExtractor
                     if (iconData != null)
                     {
                         string iconFilename = $"{furniName}_icon";
-                        if (colorId > -1) iconFilename += $"_color_{colorId}";
+                        if (colorId > -1) iconFilename += $"_{colorId}";
                         File.WriteAllBytes(Path.Combine(furniOutputDirectory, iconFilename + ".png"), iconData);
                     }
                 }

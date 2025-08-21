@@ -24,7 +24,6 @@ namespace Chroma
         public string? Ink;
         public bool IgnoreMouse;
         public bool Shadow;
-        // public string? ColourCode; // <-- ELIMINADO: Esta propiedad ya no se almacena aquí
         public int Alpha = -1;
         public bool IsIconAsset; // <-- NUEVO: Indica si este asset es parte de un icono (basado en su nombre)
 
@@ -56,13 +55,16 @@ namespace Chroma
                 Direction = IsIconAsset ? 0 : int.Parse(data[2]);
                 Frame = IsIconAsset ? 0 : int.Parse(data[3]);
                 
-                string sizeForLayerProperties = chromaFurniture.IsSmallFurni ? "32" : "64";
+                // <-- CORRECCIÓN AQUÍ: El tamaño para buscar propiedades de capa debe depender de si ESTE asset
+                // es un icono, no del estado global del renderizador (chromaFurniture.IsSmallFurni).
+                string sizeForLayerProperties = IsIconAsset ? "1" : (IsSmall ? "32" : "64");
 
                 var layerNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{sizeForLayerProperties}']/layers/layer[@id='{this.Layer}']");
                 
                 if (layerNode == null)
                 {
-                    layerNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{sizeForLayerProperties}']/directions/direction[@id='{chromaFurniture.RenderDirection}']/layer[@id='{this.Layer}']");
+                    // La búsqueda de fallback también debe usar la dirección del propio asset.
+                    layerNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{sizeForLayerProperties}']/directions/direction[@id='{this.Direction}']/layer[@id='{this.Layer}']");
                 }
                 
                 if (layerNode != null)
@@ -79,7 +81,6 @@ namespace Chroma
                 Z = (Z * 1000) + Layer;
                 
                 // <-- ELIMINADO: La lógica de ColourCode se movió a ChromaFurniture.RenderSingleFrame/RenderAnimationFrame -->
-                // (como ya se había hecho en la versión que falla, esto es correcto)
             }
             catch (Exception e)
             {
