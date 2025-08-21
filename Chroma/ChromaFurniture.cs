@@ -30,17 +30,17 @@ namespace Chroma
         public int CANVAS_WIDTH = 500;
         public int CANVAS_HEIGHT = 500;
         private bool CropImage = true;
-        public bool IsIcon; // Esta propiedad ya existía, ahora la inicializaremos.
+        public bool IsIcon;
         public SortedDictionary<int, ChromaAnimation> Animations;
         public int HighestAnimationLayer;
         public int MaxStates { get; private set; }
+        private bool RenderShadows;
         public string OutputDirectory => Path.Combine("output", Sprite);
         public string OutputAssetsDirectory => Path.Combine(OutputDirectory, "assets");
         public string XmlDirectory => Path.Combine(OutputDirectory, "xml");
         
         // --- CONSTRUCTOR ---
-        // <-- CAMBIO: Añadido el parámetro 'isIcon' -->
-        public ChromaFurniture(string inputFileName, bool isSmallFurni, int renderState, int renderDirection, int colourId = -1, bool isIcon = false)
+        public ChromaFurniture(string inputFileName, bool isSmallFurni, int renderState, int renderDirection, int colourId = -1, bool isIcon = false, bool renderShadows = true)
         {
             this.fileName = inputFileName;
             this.IsSmallFurni = isSmallFurni;
@@ -50,11 +50,11 @@ namespace Chroma
             this.ColourId = colourId;
             this.Sprite = Path.GetFileNameWithoutExtension(inputFileName);
             this.Animations = new SortedDictionary<int, ChromaAnimation>();
-            this.IsIcon = isIcon; // <-- CAMBIO: Se asigna el valor del parámetro.
+            this.IsIcon = isIcon;
+            this.RenderShadows = renderShadows;
         }
 
-        // El resto del archivo permanece sin cambios...
-        // --- NUEVO MÉTODO DE DETECCIÓN DE COLOR ---
+        // --- MÉTODO DE DETECCIÓN DE COLOR ---
         public List<int> GetAvailableColorIds()
         {
             var colorIds = new List<int>();
@@ -97,9 +97,10 @@ namespace Chroma
                 var y = int.Parse(assetNode.Attributes?["y"]?.InnerText ?? "0");
                 string? imageName = assetNode.Attributes?["name"]?.InnerText;
                 if (string.IsNullOrEmpty(imageName)) continue;
-                // Esta lógica ahora funcionará correctamente gracias al constructor
+
                 if (!IsIcon && imageName.Contains("_icon_")) continue;
                 if (IsIcon && !imageName.Contains("_icon_")) continue;
+
                 string? source = assetNode.Attributes?["source"]?.InnerText;
                 var chromaAsset = new ChromaAsset(this, x, y, source, imageName);
                 if (chromaAsset.Parse())
@@ -116,10 +117,8 @@ namespace Chroma
         private List<ChromaAsset> CreateBuildQueue()
         {
             if (RenderState > MaxStates) RenderState = 0;
-
             var candidates = Assets.Where(x => x.IsSmall == IsSmallFurni && x.Direction == RenderDirection).ToList();
             var renderFrames = new List<ChromaAsset>();
-
             for (int layer = 0; layer < this.HighestAnimationLayer; layer++)
             {
                 int frameId = 0;
@@ -127,17 +126,20 @@ namespace Chroma
                 {
                     frameId = int.Parse(Animations[layer].States[RenderState].Frames[0]);
                 }
-                
-                // <-- ***** CORRECCIÓN CLAVE ***** -->
-                // Antes: Se usaba FirstOrDefault, lo que solo seleccionaba un asset por capa.
-                // Ahora: Se usa Where y AddRange para añadir TODOS los assets de la capa,
-                // permitiendo renderizar la base y la máscara de color del icono juntas.
                 var assetsForLayer = candidates.Where(a => a.Layer == layer && a.Frame == frameId && !a.Shadow);
+                
+                if (!this.RenderShadows)
+                {
+                    assetsForLayer = assetsForLayer.Where(a => !a.IgnoreMouse);
+                }
+                
                 renderFrames.AddRange(assetsForLayer);
             }
-
-            // Añadimos las sombras al final. Su Z-index (int.MinValue) las pondrá debajo.
-            renderFrames.AddRange(candidates.Where(a => a.Shadow));
+            
+            if (this.RenderShadows)
+            {
+                renderFrames.AddRange(candidates.Where(a => a.Shadow));
+            }
             
             return renderFrames.OrderBy(x => x.Z).ToList();
         }
@@ -154,7 +156,7 @@ namespace Chroma
             if (buildQueue == null || buildQueue.Count == 0) return null;
 
             var origin = new Point(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
-            var canvas = DrawingCanvas.Clone();
+            using var canvas = new Image<Rgba32>(CANVAS_WIDTH, CANVAS_HEIGHT);
 
             foreach (var asset in buildQueue)
             {
@@ -177,10 +179,38 @@ namespace Chroma
                 }
             }
             
-            return CropImage ? ImageUtil.TrimImage(canvas, Color.Transparent) : canvas;
+            var finalImage = CropImage ? ImageUtil.TrimImage(canvas, Color.Transparent) : canvas.Clone();
+            return finalImage;
         }
 
         // --- LÓGICA DE ANIMACIÓN ---
+        public void GenerateAnimationFrames(string baseFilename)
+        {
+            var bestAnimationState = Animations.Values.SelectMany(anim => anim.States).OrderByDescending(state => state.Value.Frames.Count).FirstOrDefault();
+            if (bestAnimationState.Value == null || bestAnimationState.Value.Frames.Count <= 1)
+            {
+                return;
+            }
+
+            int animationId = bestAnimationState.Key;
+            var animationSequence = bestAnimationState.Value.Frames;
+
+            string frameDir = Path.Combine(Path.GetDirectoryName(baseFilename)!, "frames");
+            Directory.CreateDirectory(frameDir);
+
+            Console.WriteLine($"      Guardando frames individuales en: {frameDir}");
+
+            for (int i = 0; i < animationSequence.Count; i++)
+            {
+                using var frameImage = RenderAnimationFrame(i, animationId, trim: true);
+                if (frameImage != null)
+                {
+                    string frameFilename = $"{Path.GetFileNameWithoutExtension(baseFilename)}_frame_{i:D2}.png";
+                    frameImage.SaveAsPng(Path.Combine(frameDir, frameFilename));
+                }
+            }
+        }
+
         public void GenerateAnimationGif(string outputGifPath)
         {
             var bestAnimationState = Animations.Values.SelectMany(anim => anim.States).OrderByDescending(state => state.Value.Frames.Count).FirstOrDefault();
@@ -226,7 +256,12 @@ namespace Chroma
                 {
                     using (var croppedFrame = fullFrame.Clone(ctx => ctx.Crop(masterBoundingBox)))
                     {
-                        croppedFrame.Frames.RootFrame.Metadata.GetGifMetadata().FrameDelay = frameDelay;
+                        var frameMetadata = croppedFrame.Frames.RootFrame.Metadata.GetGifMetadata();
+                        frameMetadata.FrameDelay = frameDelay;
+                        
+                        // <-- CORRECCIÓN AQUÍ: El nombre correcto es RestoreToBackground -->
+                        frameMetadata.DisposalMethod = GifDisposalMethod.RestoreToBackground;
+
                         finalGif.Frames.AddFrame(croppedFrame.Frames.RootFrame);
                     }
                 }
@@ -243,23 +278,50 @@ namespace Chroma
         {
             var candidates = Assets.Where(x => x.IsSmall == IsSmallFurni && x.Direction == RenderDirection).ToList();
             var renderFrames = new List<ChromaAsset>();
+
             for (int layer = 0; layer < HighestAnimationLayer; layer++)
             {
                 int assetFrameId = 0;
-                if (Animations.ContainsKey(layer) && Animations[layer].States.ContainsKey(animationId))
+
+                if (Animations.ContainsKey(layer))
                 {
-                    var sequence = Animations[layer].States[animationId].Frames;
-                    if (sequence.Any()) assetFrameId = int.Parse(sequence[timelineIndex % sequence.Count]);
+                    var layerAnimations = Animations[layer];
+
+                    if (layerAnimations.States.ContainsKey(animationId))
+                    {
+                        var sequence = layerAnimations.States[animationId].Frames;
+                        if (sequence.Any())
+                        {
+                            assetFrameId = int.Parse(sequence[timelineIndex % sequence.Count]);
+                        }
+                    }
+                    else if (layerAnimations.States.ContainsKey(RenderState) && layerAnimations.States[RenderState].Frames.Any())
+                    {
+                        assetFrameId = int.Parse(layerAnimations.States[RenderState].Frames[0]);
+                    }
                 }
-                var asset = candidates.FirstOrDefault(a => a.Layer == layer && a.Frame == assetFrameId);
-                if (asset != null)
+                
+                var assetsForLayer = candidates.Where(a => a.Layer == layer && a.Frame == assetFrameId);
+                
+                foreach(var asset in assetsForLayer)
                 {
+                    if (!this.RenderShadows && asset.IgnoreMouse)
+                    {
+                        continue;
+                    }
+                    
                     if (!asset.Shadow)
                     {
                         renderFrames.Add(asset);
                     }
                 }
             }
+            
+            if (this.RenderShadows)
+            {
+                renderFrames.AddRange(candidates.Where(a => a.Shadow));
+            }
+
             return renderFrames.OrderBy(x => x.Z).ToList();
         }
 
@@ -267,8 +329,11 @@ namespace Chroma
         {
             var buildQueue = CreateBuildQueueForAnimationFrame(timelineIndex, animationId);
             if (buildQueue == null || buildQueue.Count == 0) return null;
+            
             var origin = new Point(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
-            var canvas = DrawingCanvas.Clone();
+            
+            using var canvas = new Image<Rgba32>(CANVAS_WIDTH, CANVAS_HEIGHT);
+
             foreach (var asset in buildQueue)
             {
                 var assetPath = asset.GetImagePath();
@@ -286,7 +351,8 @@ namespace Chroma
                     canvas.Mutate(ctx => ctx.DrawImage(image, location, options.GraphicsOptions));
                 }
             }
-            return trim ? ImageUtil.TrimImage(canvas, Color.Transparent) : canvas;
+            
+            return trim ? ImageUtil.TrimImage(canvas, Color.Transparent) : canvas.Clone();
         }
 
         private Rectangle FindBoundingBox(Image<Rgba32> image, Rgba32 trimColor)
