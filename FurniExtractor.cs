@@ -37,7 +37,8 @@ namespace SimpleExtractor
             }
 
             // --- FASE 1: Extraer datos binarios (XML) ---
-            Console.WriteLine("   Fase 1: Extrayendo datos binarios (XML)...");
+            // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
+            Logger.Log($"      [{furniName}] Extrayendo datos binarios (XML)...");
             var dataTags = flash.Tags.Where(t => t.Kind == TagKind.DefineBinaryData).Cast<DefineBinaryDataTag>();
             foreach (var data in dataTags)
             {
@@ -58,7 +59,8 @@ namespace SimpleExtractor
             }
 
             // --- FASE 2: Extraer imágenes ---
-            Console.WriteLine("   Fase 2: Extrayendo imágenes...");
+            // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
+            Logger.Log($"      [{furniName}] Extrayendo imágenes...");
             var imageTags = flash.Tags.Where(t => t.Kind == TagKind.DefineBitsLossless2).Cast<DefineBitsLossless2Tag>();
             var symbolsImages = imageTags.ToDictionary(img => img.Id);
             foreach (var entry in symbolsMap)
@@ -69,7 +71,8 @@ namespace SimpleExtractor
             }
 
             // --- FASE 3: Post-procesar assets ---
-            Console.WriteLine("   Fase 3: Post-procesando assets...");
+            // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
+            Logger.Log($"      [{furniName}] Post-procesando assets...");
             var assetsXmlPath = Path.Combine(xmlDirectory, "assets.xml");
             if (File.Exists(assetsXmlPath))
             {
@@ -95,22 +98,18 @@ namespace SimpleExtractor
                                 else { File.Copy(sourcePath, targetPath); }
                             }
                         }
-
-                        // <-- CAMBIO: Eliminada la lógica de copia de icono -->
-                        // La generación del icono ahora se hace en Program.cs para poder aplicar colores.
-                        // Ya no se copia el asset base "_icon_a".
                     }
                 }
             }
 
             // --- FASE 4: Generar furni.json a partir de los XML ---
-            Console.WriteLine("   Fase 4: Generando furni.json...");
+            // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
+            Logger.Log($"      [{furniName}] Generando furni.json...");
             GenerateFurniJson(furniName, outputFurniDirectory, xmlDirectory);
 
             return true;
         }
         
-        // El resto del archivo (GenerateFurniJson, WriteImage) permanece sin cambios...
         private static void GenerateFurniJson(string furniName, string outputDir, string xmlDir)
         {
             var furniData = new JsonFurniData
@@ -121,7 +120,7 @@ namespace SimpleExtractor
                 Visualization = new JsonVisualizationData()
             };
 
-            // Parse assets.xml
+            // ... (Lógica de parseo XML sin cambios) ...
             var assetsDoc = Chroma.FileUtil.SolveXmlFile(xmlDir, "assets");
             if (assetsDoc != null)
             {
@@ -211,8 +210,6 @@ namespace SimpleExtractor
                             Colors = new Dictionary<string, List<JsonColor>>(),
                             Animations = new Dictionary<string, JsonAnimation>()
                         };
-
-                        // Layers (nivel superior)
                         var layerNodes = vizNode.SelectNodes("layers/layer");
                         if (layerNodes != null) foreach (XmlNode layerNode in layerNodes)
                         {
@@ -221,8 +218,6 @@ namespace SimpleExtractor
                                 viz.Layers[id.ToString()] = ParseJsonLayer(layerNode);
                             }
                         }
-
-                        // Directions (puede contener capas anidadas)
                         var dirNodes = vizNode.SelectNodes("directions/direction");
                         if (dirNodes != null) foreach (XmlNode dirNode in dirNodes)
                         {
@@ -243,8 +238,6 @@ namespace SimpleExtractor
                                 viz.Directions[dirId.ToString()] = jsonDir;
                             }
                         }
-                        
-                        // Colors
                         var colorNodes = vizNode.SelectNodes("colors/color");
                         if (colorNodes != null) foreach (XmlNode colorNode in colorNodes)
                         {
@@ -262,8 +255,6 @@ namespace SimpleExtractor
                                 }
                             }
                         }
-
-                        // Animations
                         var animNodes = vizNode.SelectNodes("animations/animation");
                         if (animNodes != null) foreach (XmlNode animNode in animNodes)
                         {
@@ -293,18 +284,18 @@ namespace SimpleExtractor
                                 viz.Animations[animId.ToString()] = anim;
                             }
                         }
-
                         if (viz.Size == 64) furniData.Visualization.Size64 = viz;
                         else if (viz.Size == 32) furniData.Visualization.Size32 = viz;
                         else if (viz.Size == 1) furniData.Visualization.Size1 = viz;
                     }
                 }
             }
-            
+
             var jsonSettings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore, Formatting = Newtonsoft.Json.Formatting.Indented };
             string json = JsonConvert.SerializeObject(furniData, jsonSettings);
             File.WriteAllText(Path.Combine(outputDir, "furni.json"), json);
-            Console.WriteLine("      -> Archivo furni.json generado correctamente.");
+            // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
+            Logger.Log($"         -> [{furniName}] Archivo furni.json generado correctamente.");
         }
         
         private static JsonLayer ParseJsonLayer(XmlNode layerNode)

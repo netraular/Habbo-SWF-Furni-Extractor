@@ -50,20 +50,15 @@ namespace Chroma
                 var xmlData = FileUtil.SolveXmlFile(chromaFurniture.XmlDirectory, "visualization");
                 if (xmlData == null) return false;
                 
-                // Este tamaño se usa para buscar propiedades de capa generales (z, ink, etc.)
                 string sizeForLayerProperties = chromaFurniture.IsSmallFurni ? "32" : "64";
 
-                // <-- CAMBIO IMPORTANTE: LÓGICA DE FALLBACK AÑADIDA -->
-                // 1. Intentar encontrar la capa en la sección general de capas.
                 var layerNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{sizeForLayerProperties}']/layers/layer[@id='{this.Layer}']");
-
-                // 2. Si no se encuentra, buscarla dentro de la dirección específica (fallback).
+                
                 if (layerNode == null)
                 {
                     layerNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{sizeForLayerProperties}']/directions/direction[@id='{chromaFurniture.RenderDirection}']/layer[@id='{this.Layer}']");
                 }
                 
-                // Ahora, procesar el nodo de capa si se encontró en alguna de las rutas.
                 if (layerNode != null)
                 {
                     if (layerNode.Attributes?["z"]?.InnerText != null)
@@ -75,15 +70,10 @@ namespace Chroma
                     if (layerNode.Attributes?["ignoreMouse"]?.InnerText != null) IgnoreMouse = layerNode.Attributes["ignoreMouse"]!.InnerText == "1";
                 }
 
-                // La Z se calcula para asegurar el orden correcto.
                 Z = (Z * 1000) + Layer;
                 
                 if (chromaFurniture.ColourId > -1)
                 {
-                    // <-- ***** CORRECCIÓN CLAVE ***** -->
-                    // Determinar el tamaño correcto para la búsqueda de color.
-                    // Si es un icono, SIEMPRE buscar en size="1".
-                    // Si no, usar el tamaño del mueble (32 o 64).
                     string sizeForColorLookup = chromaFurniture.IsIcon ? "1" : sizeForLayerProperties;
 
                     var colorNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{sizeForColorLookup}']/colors/color[@id='{chromaFurniture.ColourId}']/colorLayer[@id='{Layer}']");
@@ -95,7 +85,8 @@ namespace Chroma
             }
             catch (Exception e)
             {
-                Console.WriteLine($"      [AVISO] Error parseando asset '{imageName}': {e.Message}");
+                // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
+                SimpleExtractor.Logger.Log($"      [AVISO] [{chromaFurniture.Sprite}] Error parseando asset '{imageName}': {e.Message}");
                 return false;
             }
             return true;

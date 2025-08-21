@@ -184,7 +184,8 @@ namespace Chroma
         }
 
         // --- LÓGICA DE ANIMACIÓN ---
-        public void GenerateAnimationFrames(string baseFilename)
+        // <-- CAMBIO: Añadido furniName como parámetro -->
+        public void GenerateAnimationFrames(string baseFilename, string furniName)
         {
             var bestAnimationState = Animations.Values.SelectMany(anim => anim.States).OrderByDescending(state => state.Value.Frames.Count).FirstOrDefault();
             if (bestAnimationState.Value == null || bestAnimationState.Value.Frames.Count <= 1)
@@ -198,7 +199,8 @@ namespace Chroma
             string frameDir = Path.Combine(Path.GetDirectoryName(baseFilename)!, "frames");
             Directory.CreateDirectory(frameDir);
 
-            Console.WriteLine($"      Guardando frames individuales en: {frameDir}");
+            // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
+            SimpleExtractor.Logger.Log($"         -> [{furniName}] Guardando frames individuales en: {frameDir}");
 
             for (int i = 0; i < animationSequence.Count; i++)
             {
@@ -211,12 +213,14 @@ namespace Chroma
             }
         }
 
-        public void GenerateAnimationGif(string outputGifPath)
+        // <-- CAMBIO: Añadido furniName como parámetro -->
+        public void GenerateAnimationGif(string outputGifPath, string furniName)
         {
             var bestAnimationState = Animations.Values.SelectMany(anim => anim.States).OrderByDescending(state => state.Value.Frames.Count).FirstOrDefault();
             if (bestAnimationState.Value == null || bestAnimationState.Value.Frames.Count <= 1)
             {
-                Console.WriteLine("      Este mueble no tiene secuencias de animación con más de un frame.");
+                // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
+                SimpleExtractor.Logger.Log($"         -> [{furniName}] No tiene secuencias de animación válidas.");
                 return;
             }
 
@@ -225,7 +229,8 @@ namespace Chroma
             int frameRepeat = bestAnimationState.Value.FramesPerSecond > 0 ? bestAnimationState.Value.FramesPerSecond : 4;
             int frameDelay = (int)Math.Round(frameRepeat * 4.16);
 
-            Console.WriteLine($"      Generando GIF desde animación ID={animationId} con {animationSequence.Count} frames (velocidad: {frameRepeat})...");
+            // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
+            SimpleExtractor.Logger.Log($"         -> [{furniName}] Generando GIF desde anim. ID={animationId} con {animationSequence.Count} frames (velocidad: {frameRepeat})...");
             
             var fullSizeFrames = new List<Image<Rgba32>>();
             for (int i = 0; i < animationSequence.Count; i++)
@@ -236,7 +241,8 @@ namespace Chroma
 
             if (fullSizeFrames.Count < 2)
             {
-                Console.WriteLine("      No se pudieron generar suficientes frames para la animación.");
+                // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
+                SimpleExtractor.Logger.Log($"         -> [{furniName}] No se pudieron generar suficientes frames para la animación.");
                 fullSizeFrames.ForEach(f => f.Dispose());
                 return;
             }
@@ -258,8 +264,6 @@ namespace Chroma
                     {
                         var frameMetadata = croppedFrame.Frames.RootFrame.Metadata.GetGifMetadata();
                         frameMetadata.FrameDelay = frameDelay;
-                        
-                        // <-- CORRECCIÓN AQUÍ: El nombre correcto es RestoreToBackground -->
                         frameMetadata.DisposalMethod = GifDisposalMethod.RestoreToBackground;
 
                         finalGif.Frames.AddFrame(croppedFrame.Frames.RootFrame);
@@ -271,7 +275,8 @@ namespace Chroma
             }
 
             fullSizeFrames.ForEach(f => f.Dispose());
-            Console.WriteLine($"      -> GIF de animación guardado en: {Path.GetFileName(outputGifPath)}");
+            // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
+            SimpleExtractor.Logger.Log($"            -> [{furniName}] GIF de animación guardado en: {Path.GetFileName(outputGifPath)}");
         }
 
         private List<ChromaAsset> CreateBuildQueueForAnimationFrame(int timelineIndex, int animationId)
