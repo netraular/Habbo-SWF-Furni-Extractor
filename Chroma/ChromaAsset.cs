@@ -26,6 +26,7 @@ namespace Chroma
         public bool Shadow;
         // public string? ColourCode; // <-- ELIMINADO: Esta propiedad ya no se almacena aquí
         public int Alpha = -1;
+        public bool IsIconAsset; // <-- NUEVO: Indica si este asset es parte de un icono (basado en su nombre)
 
         public ChromaAsset(ChromaFurniture chromaFurniture, int x, int y, string? sourceImage, string imageName)
         {
@@ -36,6 +37,7 @@ namespace Chroma
             this.imageName = imageName;
         }
 
+        // El método Parse ahora recibe el XmlDocument directamente para no depender del estado inicial de ChromaFurniture.
         public bool Parse(XmlDocument xmlData)
         {
             try
@@ -44,8 +46,15 @@ namespace Chroma
                 string[] data = dataName.Split('_');
                 IsSmall = (data[0] == "32");
                 Layer = (data[1].ToUpper().FirstOrDefault() - 64) - 1;
-                Direction = chromaFurniture.IsIcon ? 0 : int.Parse(data[2]);
-                Frame = chromaFurniture.IsIcon ? 0 : int.Parse(data[3]);
+                
+                // <-- CAMBIO CRÍTICO: Determinamos si es un asset de icono por su nombre de imagen. -->
+                // Esto es independiente del estado 'IsIcon' de ChromaFurniture en el momento de la carga.
+                IsIconAsset = imageName.Contains("_icon_");
+
+                // <-- CAMBIO CRÍTICO: La Dirección y el Frame se establecen a 0 si es un asset de icono. -->
+                // Esto asegura que los assets de icono siempre se carguen con la dirección y frame correctas.
+                Direction = IsIconAsset ? 0 : int.Parse(data[2]);
+                Frame = IsIconAsset ? 0 : int.Parse(data[3]);
                 
                 string sizeForLayerProperties = chromaFurniture.IsSmallFurni ? "32" : "64";
 
@@ -70,15 +79,7 @@ namespace Chroma
                 Z = (Z * 1000) + Layer;
                 
                 // <-- ELIMINADO: La lógica de ColourCode se movió a ChromaFurniture.RenderSingleFrame/RenderAnimationFrame -->
-                // if (chromaFurniture.ColourId > -1)
-                // {
-                //     string sizeForColorLookup = chromaFurniture.IsIcon ? "1" : sizeForLayerProperties;
-                //     var colorNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{sizeForColorLookup}']/colors/color[@id='{chromaFurniture.ColourId}']/colorLayer[@id='{Layer}']");
-                //     if (colorNode?.Attributes?["color"]?.InnerText != null)
-                //     {
-                //         ColourCode = colorNode.Attributes["color"]!.InnerText;
-                //     }
-                // }
+                // (como ya se había hecho en la versión que falla, esto es correcto)
             }
             catch (Exception e)
             {

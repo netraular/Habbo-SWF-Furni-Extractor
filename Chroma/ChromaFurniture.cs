@@ -22,10 +22,10 @@ namespace Chroma
         public int RenderState { get; set; }
         public int RenderDirection { get; set; }
         public int ColourId { get; set; } // Esta propiedad se actualiza en Program.cs en cada iteración
-        public bool IsIcon { get; set; }
+        public bool IsIcon { get; set; } // Esta propiedad se actualiza en Program.cs en cada iteración
         public bool RenderShadows { get; set; }
         public string Sprite;
-        public List<ChromaAsset> Assets;
+        public List<ChromaAsset> Assets; // Contendrá TODOS los assets (normales e iconos)
         public Image<Rgba32> DrawingCanvas = null!;
         public int CANVAS_WIDTH = 500;
         public int CANVAS_HEIGHT = 500;
@@ -63,7 +63,9 @@ namespace Chroma
             var xmlData = GetCachedXml("visualization");
             if (xmlData == null) return colorIds;
 
-            string size = IsSmallFurni ? "32" : "64";
+            // La detección de color para los IDs disponibles no es específica de icono/no-icono aquí
+            // (se asume que un furni tiene un conjunto de colores, independiente de si es para el icono o no)
+            string size = IsSmallFurni ? "32" : "64"; // Esto es para el tamaño del furni, no del icono en sí.
             XmlNodeList? colorNodes = xmlData.SelectNodes($"//visualizationData/visualization[@size='{size}']/colors/color");
             
             if (colorNodes != null)
@@ -84,9 +86,9 @@ namespace Chroma
         {
             DrawingCanvas = new Image<Rgba32>(CANVAS_WIDTH, CANVAS_HEIGHT, Color.Transparent);
             CacheXmlFiles(); // Primero cachear los XML
-            GenerateAnimations();
-            GenerateAssets(); // Luego generar los assets (que ya no consultan color)
-            CacheAssetImages(); // Y finalmente cachear las imágenes
+            GenerateAnimations(); // Las animaciones no dependen de si es un icono
+            GenerateAssets();     // Luego generar TODOS los assets
+            CacheAssetImages();   // Y finalmente cachear las imágenes
         }
         
         private void CacheXmlFiles()
@@ -132,11 +134,16 @@ namespace Chroma
                 string? imageName = assetNode.Attributes?["name"]?.InnerText;
                 if (string.IsNullOrEmpty(imageName)) continue;
 
+                // <-- ELIMINADO: Ya NO filtramos los iconos aquí. Todos los assets se cargan. -->
+                // if (!IsIcon && imageName.Contains("_icon_")) continue;
+                // if (IsIcon && !imageName.Contains("_icon_")) continue;
+
                 string? source = assetNode.Attributes?["source"]?.InnerText;
                 var chromaAsset = new ChromaAsset(this, x, y, source, imageName);
 
-                // IMPORTANTE: asset.Parse ya no intentará obtener ColourCode
-                if (chromaAsset.Parse(visualizationXml))
+                // IMPORTANTE: asset.Parse ahora recibe el XML para obtener propiedades del asset
+                // y determinará si es un icono o no por su nombre de imagen.
+                if (chromaAsset.Parse(visualizationXml)) 
                 {
                     chromaAsset.flipH = assetNode.Attributes?["flipH"]?.InnerText == "1";
                     if (imageName.Contains("_sd_")) { chromaAsset.Shadow = true; chromaAsset.Z = int.MinValue; }
@@ -169,21 +176,30 @@ namespace Chroma
         {
             if (RenderState > MaxStates) RenderState = 0;
 
+            // <-- CAMBIO CRÍTICO: Filtrar assets AQUI, basado en si queremos un icono o un furni normal. -->
+            // Los assets de icono se distinguen por su propiedad IsIconAsset.
             var candidates = Assets.Where(x => 
                 x.IsSmall == IsSmallFurni && 
-                x.Direction == RenderDirection &&
-                (IsIcon ? x.imageName.Contains("_icon_") : !x.imageName.Contains("_icon_"))
+                (IsIcon ? x.IsIconAsset : !x.IsIconAsset) // Si IsIcon es true, solo assets de icono. Si es false, solo no-iconos.
             ).ToList();
 
             var renderFrames = new List<ChromaAsset>();
             for (int layer = 0; layer < this.HighestAnimationLayer; layer++)
             {
                 int frameId = 0;
-                if (Animations.ContainsKey(layer) && Animations[layer].States.ContainsKey(RenderState) && Animations[layer].States[RenderState].Frames.Any())
+                // Si estamos renderizando un icono, el frame siempre es 0, no se buscan animaciones.
+                if (!IsIcon && Animations.ContainsKey(layer) && Animations[layer].States.ContainsKey(RenderState) && Animations[layer].States[RenderState].Frames.Any())
                 {
                     frameId = int.Parse(Animations[layer].States[RenderState].Frames[0]);
                 }
-                var assetsForLayer = candidates.Where(a => a.Layer == layer && a.Frame == frameId && !a.Shadow);
+                
+                // Ahora, de los candidatos correctos, filtramos por Dirección y Frame.
+                var assetsForLayer = candidates.Where(a => 
+                    a.Layer == layer && 
+                    a.Direction == RenderDirection && // Esto permite renderizar iconos con Direction=0 y furnis con la dirección deseada.
+                    a.Frame == frameId && 
+                    !a.Shadow
+                );
 
                 if (!this.RenderShadows)
                 {
@@ -195,6 +211,7 @@ namespace Chroma
 
             if (this.RenderShadows)
             {
+                // Las sombras también deben ser de los candidatos correctos (icono vs no-icono)
                 renderFrames.AddRange(candidates.Where(a => a.Shadow));
             }
 
@@ -231,7 +248,7 @@ namespace Chroma
                     // Aplicar alpha si existe en la capa
                     if (asset.Alpha != -1) TintImage(image, "FFFFFF", (byte)asset.Alpha);
                     
-                    // <-- CAMBIO CRÍTICO: Obtener ColourCode aquí, en tiempo de renderizado -->
+                    // <-- CRÍTICO: Obtener ColourCode aquí, en tiempo de renderizado -->
                     string? currentColourCode = GetLayerColorCode(asset.Layer);
                     if (currentColourCode != null) TintImage(image, currentColourCode, 255);
                     
@@ -249,99 +266,8 @@ namespace Chroma
         }
 
         // --- LÓGICA DE ANIMACIÓN (ACTUALIZADA) ---
-        // ... (GenerateAnimationFrames y GenerateAnimationGif no necesitan cambios directos en su lógica,
-        //     ya que llaman a RenderAnimationFrame, que es donde se aplica el fix) ...
-        
-        private List<ChromaAsset> CreateBuildQueueForAnimationFrame(int timelineIndex, int animationId)
-        {
-            var candidates = Assets.Where(x => 
-                x.IsSmall == IsSmallFurni && 
-                x.Direction == RenderDirection &&
-                (IsIcon ? x.imageName.Contains("_icon_") : !x.imageName.Contains("_icon_"))
-            ).ToList();
-            var renderFrames = new List<ChromaAsset>();
-
-            for (int layer = 0; layer < HighestAnimationLayer; layer++)
-            {
-                int assetFrameId = 0;
-
-                if (Animations.ContainsKey(layer))
-                {
-                    var layerAnimations = Animations[layer];
-
-                    if (layerAnimations.States.ContainsKey(animationId))
-                    {
-                        var sequence = layerAnimations.States[animationId].Frames;
-                        if (sequence.Any())
-                        {
-                            assetFrameId = int.Parse(sequence[timelineIndex % sequence.Count]);
-                        }
-                    }
-                    else if (layerAnimations.States.ContainsKey(RenderState) && layerAnimations.States[RenderState].Frames.Any())
-                    {
-                        assetFrameId = int.Parse(layerAnimations.States[RenderState].Frames[0]);
-                    }
-                }
-                
-                var assetsForLayer = candidates.Where(a => a.Layer == layer && a.Frame == assetFrameId);
-                
-                foreach(var asset in assetsForLayer)
-                {
-                    if (!this.RenderShadows && asset.IgnoreMouse)
-                    {
-                        continue;
-                    }
-                    
-                    if (!asset.Shadow)
-                    {
-                        renderFrames.Add(asset);
-                    }
-                }
-            }
-            
-            if (this.RenderShadows)
-            {
-                renderFrames.AddRange(candidates.Where(a => a.Shadow));
-            }
-
-            return renderFrames.OrderBy(x => x.Z).ToList();
-        }
-
-        private Image<Rgba32>? RenderAnimationFrame(int timelineIndex, int animationId, bool trim = true)
-        {
-            var buildQueue = CreateBuildQueueForAnimationFrame(timelineIndex, animationId);
-            if (buildQueue == null || buildQueue.Count == 0) return null;
-            
-            var origin = new Point(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
-            
-            using var canvas = new Image<Rgba32>(CANVAS_WIDTH, CANVAS_HEIGHT);
-
-            foreach (var asset in buildQueue)
-            {
-                if (!_imageCache.TryGetValue(asset.imageName, out var sourceImage)) continue;
-
-                using (var image = sourceImage.Clone())
-                {
-                    int finalRelativeX = asset.RelativeX;
-                    if (asset.flipH) { finalRelativeX = image.Width - asset.RelativeX; }
-                    var location = new Point(origin.X - finalRelativeX, origin.Y - asset.RelativeY);
-                    if (asset.Alpha != -1) TintImage(image, "FFFFFF", (byte)asset.Alpha);
-                    
-                    // <-- CAMBIO CRÍTICO: Obtener ColourCode aquí, en tiempo de renderizado -->
-                    string? currentColourCode = GetLayerColorCode(asset.Layer);
-                    if (currentColourCode != null) TintImage(image, currentColourCode, 255);
-                    
-                    if (asset.Shadow) image.Mutate(ctx => ctx.Opacity(0.4f));
-                    var blendMode = (asset.Ink == "ADD" || asset.Ink == "33") ? PixelColorBlendingMode.Add : PixelColorBlendingMode.Normal;
-                    var options = new DrawingOptions { GraphicsOptions = { ColorBlendingMode = blendMode } };
-                    canvas.Mutate(ctx => ctx.DrawImage(image, location, options.GraphicsOptions));
-                }
-            }
-            
-            return trim ? ImageUtil.TrimImage(canvas, Color.Transparent) : canvas.Clone();
-        }
-
-        // ... (El resto de métodos como GenerateAnimationFrames, GenerateAnimationGif, FindBoundingBox, TintImage, Dispose se mantienen iguales) ...
+        // Estos métodos usan RenderAnimationFrame, que ya tiene el fix, pero el CreateBuildQueueForAnimationFrame
+        // también debe reflejar los cambios en el filtrado de assets.
 
         public void GenerateAnimationFrames(string baseFilename, string furniName)
         {
@@ -429,6 +355,101 @@ namespace Chroma
 
             fullSizeFrames.ForEach(f => f.Dispose());
             SimpleExtractor.Logger.Log($"            -> [{furniName}] GIF de animación guardado en: {Path.GetFileName(outputGifPath)}");
+        }
+
+        private List<ChromaAsset> CreateBuildQueueForAnimationFrame(int timelineIndex, int animationId)
+        {
+            // <-- CAMBIO CRÍTICO: Filtrar assets AQUI también, basado en si queremos un icono o un furni normal. -->
+            var candidates = Assets.Where(x => 
+                x.IsSmall == IsSmallFurni && 
+                (IsIcon ? x.IsIconAsset : !x.IsIconAsset) // Si IsIcon es true, solo assets de icono. Si es false, solo no-iconos.
+            ).ToList();
+            var renderFrames = new List<ChromaAsset>();
+
+            for (int layer = 0; layer < HighestAnimationLayer; layer++)
+            {
+                int assetFrameId = 0;
+
+                // Si estamos renderizando un icono, el frame siempre es 0, no se buscan animaciones.
+                if (!IsIcon && Animations.ContainsKey(layer)) 
+                {
+                    var layerAnimations = Animations[layer];
+
+                    if (layerAnimations.States.ContainsKey(animationId))
+                    {
+                        var sequence = layerAnimations.States[animationId].Frames;
+                        if (sequence.Any())
+                        {
+                            assetFrameId = int.Parse(sequence[timelineIndex % sequence.Count]);
+                        }
+                    }
+                    else if (layerAnimations.States.ContainsKey(RenderState) && layerAnimations.States[RenderState].Frames.Any())
+                    {
+                        assetFrameId = int.Parse(layerAnimations.States[RenderState].Frames[0]);
+                    }
+                }
+                
+                // Ahora, de los candidatos correctos, filtramos por Dirección y Frame.
+                var assetsForLayer = candidates.Where(a => 
+                    a.Layer == layer && 
+                    a.Direction == RenderDirection && 
+                    a.Frame == assetFrameId
+                );
+                
+                foreach(var asset in assetsForLayer)
+                {
+                    if (!this.RenderShadows && asset.IgnoreMouse)
+                    {
+                        continue;
+                    }
+                    
+                    if (!asset.Shadow)
+                    {
+                        renderFrames.Add(asset);
+                    }
+                }
+            }
+            
+            if (this.RenderShadows)
+            {
+                renderFrames.AddRange(candidates.Where(a => a.Shadow));
+            }
+
+            return renderFrames.OrderBy(x => x.Z).ToList();
+        }
+
+        private Image<Rgba32>? RenderAnimationFrame(int timelineIndex, int animationId, bool trim = true)
+        {
+            var buildQueue = CreateBuildQueueForAnimationFrame(timelineIndex, animationId);
+            if (buildQueue == null || buildQueue.Count == 0) return null;
+            
+            var origin = new Point(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+            
+            using var canvas = new Image<Rgba32>(CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            foreach (var asset in buildQueue)
+            {
+                if (!_imageCache.TryGetValue(asset.imageName, out var sourceImage)) continue;
+
+                using (var image = sourceImage.Clone())
+                {
+                    int finalRelativeX = asset.RelativeX;
+                    if (asset.flipH) { finalRelativeX = image.Width - asset.RelativeX; }
+                    var location = new Point(origin.X - finalRelativeX, origin.Y - asset.RelativeY);
+                    if (asset.Alpha != -1) TintImage(image, "FFFFFF", (byte)asset.Alpha);
+                    
+                    // <-- CRÍTICO: Obtener ColourCode aquí, en tiempo de renderizado -->
+                    string? currentColourCode = GetLayerColorCode(asset.Layer);
+                    if (currentColourCode != null) TintImage(image, currentColourCode, 255);
+                    
+                    if (asset.Shadow) image.Mutate(ctx => ctx.Opacity(0.4f));
+                    var blendMode = (asset.Ink == "ADD" || asset.Ink == "33") ? PixelColorBlendingMode.Add : PixelColorBlendingMode.Normal;
+                    var options = new DrawingOptions { GraphicsOptions = { ColorBlendingMode = blendMode } };
+                    canvas.Mutate(ctx => ctx.DrawImage(image, location, options.GraphicsOptions));
+                }
+            }
+            
+            return trim ? ImageUtil.TrimImage(canvas, Color.Transparent) : canvas.Clone();
         }
 
         private Rectangle FindBoundingBox(Image<Rgba32> image, Rgba32 trimColor)
