@@ -24,7 +24,7 @@ namespace Chroma
         public string? Ink;
         public bool IgnoreMouse;
         public bool Shadow;
-        public string? ColourCode;
+        // public string? ColourCode; // <-- ELIMINADO: Esta propiedad ya no se almacena aquí
         public int Alpha = -1;
 
         public ChromaAsset(ChromaFurniture chromaFurniture, int x, int y, string? sourceImage, string imageName)
@@ -36,7 +36,7 @@ namespace Chroma
             this.imageName = imageName;
         }
 
-        public bool Parse()
+        public bool Parse(XmlDocument xmlData)
         {
             try
             {
@@ -46,9 +46,6 @@ namespace Chroma
                 Layer = (data[1].ToUpper().FirstOrDefault() - 64) - 1;
                 Direction = chromaFurniture.IsIcon ? 0 : int.Parse(data[2]);
                 Frame = chromaFurniture.IsIcon ? 0 : int.Parse(data[3]);
-                
-                var xmlData = FileUtil.SolveXmlFile(chromaFurniture.XmlDirectory, "visualization");
-                if (xmlData == null) return false;
                 
                 string sizeForLayerProperties = chromaFurniture.IsSmallFurni ? "32" : "64";
 
@@ -72,20 +69,19 @@ namespace Chroma
 
                 Z = (Z * 1000) + Layer;
                 
-                if (chromaFurniture.ColourId > -1)
-                {
-                    string sizeForColorLookup = chromaFurniture.IsIcon ? "1" : sizeForLayerProperties;
-
-                    var colorNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{sizeForColorLookup}']/colors/color[@id='{chromaFurniture.ColourId}']/colorLayer[@id='{Layer}']");
-                    if (colorNode?.Attributes?["color"]?.InnerText != null)
-                    {
-                        ColourCode = colorNode.Attributes["color"]!.InnerText;
-                    }
-                }
+                // <-- ELIMINADO: La lógica de ColourCode se movió a ChromaFurniture.RenderSingleFrame/RenderAnimationFrame -->
+                // if (chromaFurniture.ColourId > -1)
+                // {
+                //     string sizeForColorLookup = chromaFurniture.IsIcon ? "1" : sizeForLayerProperties;
+                //     var colorNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{sizeForColorLookup}']/colors/color[@id='{chromaFurniture.ColourId}']/colorLayer[@id='{Layer}']");
+                //     if (colorNode?.Attributes?["color"]?.InnerText != null)
+                //     {
+                //         ColourCode = colorNode.Attributes["color"]!.InnerText;
+                //     }
+                // }
             }
             catch (Exception e)
             {
-                // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
                 SimpleExtractor.Logger.Log($"      [AVISO] [{chromaFurniture.Sprite}] Error parseando asset '{imageName}': {e.Message}");
                 return false;
             }

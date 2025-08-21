@@ -11,13 +11,11 @@ namespace SimpleExtractor
         {
             bool isSequential = false;
 
-            // --- FASE 0: PARSEO DE ARGUMENTOS ---
             if (args.Contains("--help"))
             {
                 ShowHelp();
                 return;
             }
-            // Configura el Logger global
             Logger.IsVerbose = args.Contains("--verbose");
             isSequential = args.Contains("--sequential");
 
@@ -65,31 +63,38 @@ namespace SimpleExtractor
             Logger.Info($"Los archivos extraídos se encuentran en la carpeta '{outputDirectory}'.");
         }
 
+        // <-- CAMBIO: Lógica completamente reestructurada para ser más eficiente -->
         private static void ProcessSingleSwf(string swfFile)
         {
             string furniName = Path.GetFileNameWithoutExtension(swfFile);
             string furniOutputDirectory = Path.Combine("output", furniName);
-            
-            // <-- LÍNEA ELIMINADA: Logger.Info($"-> Procesando: {furniName}..."); -->
+            ChromaFurniture? masterFurniture = null;
 
             try
             {
-                Logger.Log($"   [{furniName}] Fase 1: Extrayendo assets y detectando colores...");
-                FurniExtractor.Parse(swfFile, furniOutputDirectory);
+                Logger.Log($"   [{furniName}] Fase 1: Extrayendo assets y preparando datos...");
+                if (!FurniExtractor.Parse(swfFile, furniOutputDirectory))
+                {
+                    throw new Exception("Fallo la extracción inicial de assets y XML.");
+                }
                 
-                var colorDetector = new ChromaFurniture(swfFile, isSmallFurni: false, renderState: 0, renderDirection: 0);
-                colorDetector.Run();
-                var availableColorIds = colorDetector.GetAvailableColorIds();
-                if (!availableColorIds.Any()) availableColorIds.Add(-1);
+                // Creamos UNA SOLA instancia que cargará y cacheará todo
+                masterFurniture = new ChromaFurniture(swfFile, isSmallFurni: false, renderState: 0, renderDirection: 0);
+                masterFurniture.Run(); // Carga y cachea XMLs, assets e imágenes
+
+                var availableColorIds = masterFurniture.GetAvailableColorIds();
+                if (!availableColorIds.Any()) availableColorIds.Add(-1); // Añadir el color por defecto si no hay otros
 
                 foreach (int colorId in availableColorIds)
                 {
                     if (colorId > -1) Logger.Log($"   [{furniName}] --- Procesando Color ID: {colorId} ---");
 
+                    // Bucle para renderizar con y sin sombras
                     foreach (bool renderWithShadows in new[] { true, false })
                     {
                         Logger.Log($"      [{furniName}] --- Procesando Sombra: {(renderWithShadows ? "Sí" : "No")} ---");
 
+                        // Fase 2: Renderizado estático
                         Logger.Log($"      [{furniName}] Fase 2: Renderizando imágenes estáticas...");
                         string renderedDir = Path.Combine(furniOutputDirectory, "rendered");
                         Directory.CreateDirectory(renderedDir);
@@ -97,43 +102,52 @@ namespace SimpleExtractor
 
                         foreach (int direction in directionsToRender)
                         {
-                            var furniture = new ChromaFurniture(swfFile, isSmallFurni: false, renderState: 0, renderDirection: direction, colourId: colorId, renderShadows: renderWithShadows);
-                            furniture.Run();
-                            byte[]? imageData = furniture.CreateImage();
+                            // Reutilizamos la instancia maestra, solo cambiamos sus propiedades
+                            masterFurniture.RenderDirection = direction;
+                            masterFurniture.ColourId = colorId;
+                            masterFurniture.RenderShadows = renderWithShadows;
+                            masterFurniture.IsIcon = false;
+                            
+                            byte[]? imageData = masterFurniture.CreateImage();
                             if (imageData != null)
                             {
                                 string filename = $"{furniName}_dir_{direction}";
                                 if (colorId > -1) filename += $"_color_{colorId}";
                                 if (!renderWithShadows) filename += "_no_sd";
-
                                 File.WriteAllBytes(Path.Combine(renderedDir, filename + ".png"), imageData);
                             }
                         }
 
+                        // Fase 3: Animaciones
                         Logger.Log($"      [{furniName}] Fase 3: Buscando y generando animaciones...");
                         string animationDir = Path.Combine(furniOutputDirectory, "animations");
                         Directory.CreateDirectory(animationDir);
                         
-                        var animFurniture = new ChromaFurniture(swfFile, isSmallFurni: false, renderState: 0, renderDirection: 2, colourId: colorId, renderShadows: renderWithShadows);
-                        animFurniture.Run();
-                        
+                        // Reutilizamos la instancia, ajustando a una dirección estándar para la animación
+                        masterFurniture.RenderDirection = 2;
+                        masterFurniture.ColourId = colorId;
+                        masterFurniture.RenderShadows = renderWithShadows;
+                        masterFurniture.IsIcon = false;
+
                         string gifFilenameBase = $"{furniName}_animation";
                         if (colorId > -1) gifFilenameBase += $"_color_{colorId}";
                         if (!renderWithShadows) gifFilenameBase += "_no_sd";
-
                         string gifFullPath = Path.Combine(animationDir, gifFilenameBase + ".gif");
-                        animFurniture.GenerateAnimationGif(gifFullPath, furniName); 
-                        animFurniture.GenerateAnimationFrames(gifFullPath, furniName);
+
+                        masterFurniture.GenerateAnimationGif(gifFullPath, furniName); 
+                        masterFurniture.GenerateAnimationFrames(gifFullPath, furniName);
                     }
 
-                    Logger.Log($"   [{furniName}] Fase 4: Renderizando icono...");
-                    var iconFurniture = new ChromaFurniture(
-                        swfFile, isSmallFurni: false, renderState: 0,
-                        renderDirection: 0, colourId: colorId, isIcon: true, renderShadows: false
-                    );
-                    iconFurniture.Run();
-                    byte[]? iconData = iconFurniture.CreateImage();
+                    // Fase 4: Icono (fuera del bucle de sombras, ya que siempre es sin sombra)
+                    Logger.Log($"   [{furniName}] Fase 4: Renderizando icono para color ID: {colorId}...");
                     
+                    // Reutilizamos la instancia para el icono
+                    masterFurniture.IsIcon = true;
+                    masterFurniture.RenderDirection = 0; // Dirección estándar para iconos
+                    masterFurniture.ColourId = colorId;
+                    masterFurniture.RenderShadows = false; // Iconos nunca tienen sombra
+
+                    byte[]? iconData = masterFurniture.CreateImage();
                     if (iconData != null)
                     {
                         string iconFilename = $"{furniName}_icon";
@@ -149,6 +163,11 @@ namespace SimpleExtractor
                 Console.ForegroundColor = ConsoleColor.Red;
                 Logger.Info($"   -> Error al procesar el archivo {furniName}: {ex.Message}\n{ex.StackTrace}");
                 Console.ResetColor();
+            }
+            finally
+            {
+                // <-- CAMBIO: Liberamos los recursos de la instancia maestra -->
+                masterFurniture?.Dispose();
             }
         }
         
