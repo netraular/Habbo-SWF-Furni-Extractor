@@ -14,18 +14,25 @@ using SixLabors.ImageSharp.Formats.Gif;
 
 namespace Chroma
 {
+    // NUEVA CLASE PARA DEVOLVER LOS DATOS DEL RENDERIZADO
+    public class RenderResult
+    {
+        public byte[]? ImageData { get; set; }
+        public Point Offset { get; set; }
+    }
+
     public class ChromaFurniture : IDisposable
     {
-        // --- PROPIEDADES ---
+        // --- PROPIEDADES (SIN CAMBIOS) ---
         private string fileName;
         public bool IsSmallFurni { get; set; }
         public int RenderState { get; set; }
         public int RenderDirection { get; set; }
-        public int ColourId { get; set; } // Esta propiedad se actualiza en Program.cs en cada iteración
-        public bool IsIcon { get; set; } // Esta propiedad se actualiza en Program.cs en cada iteración
+        public int ColourId { get; set; }
+        public bool IsIcon { get; set; }
         public bool RenderShadows { get; set; }
         public string Sprite;
-        public List<ChromaAsset> Assets; // Contendrá TODOS los assets (normales e iconos)
+        public List<ChromaAsset> Assets;
         public Image<Rgba32> DrawingCanvas = null!;
         public int CANVAS_WIDTH = 500;
         public int CANVAS_HEIGHT = 500;
@@ -41,7 +48,7 @@ namespace Chroma
         private readonly Dictionary<string, Image<Rgba32>> _imageCache = new();
 
 
-        // --- CONSTRUCTOR ---
+        // --- CONSTRUCTOR Y MÉTODOS DE INICIALIZACIÓN (SIN CAMBIOS) ---
         public ChromaFurniture(string inputFileName, bool isSmallFurni, int renderState, int renderDirection, int colourId = -1, bool isIcon = false, bool renderShadows = true)
         {
             this.fileName = inputFileName;
@@ -56,16 +63,12 @@ namespace Chroma
             this.RenderShadows = renderShadows;
         }
 
-        // --- MÉTODO DE DETECCIÓN DE COLOR ---
         public List<int> GetAvailableColorIds()
         {
             var colorIds = new List<int>();
             var xmlData = GetCachedXml("visualization");
             if (xmlData == null) return colorIds;
-
-            // La detección de color para los IDs disponibles no es específica de icono/no-icono aquí
-            // (se asume que un furni tiene un conjunto de colores, independiente de si es para el icono o no)
-            string size = IsSmallFurni ? "32" : "64"; // Esto es para el tamaño del furni, no del icono en sí.
+            string size = IsSmallFurni ? "32" : "64";
             XmlNodeList? colorNodes = xmlData.SelectNodes($"//visualizationData/visualization[@size='{size}']/colors/color");
             
             if (colorNodes != null)
@@ -81,14 +84,13 @@ namespace Chroma
             return colorIds;
         }
 
-        // --- MÉTODOS DE INICIALIZACIÓN ---
         public void Run()
         {
             DrawingCanvas = new Image<Rgba32>(CANVAS_WIDTH, CANVAS_HEIGHT, Color.Transparent);
-            CacheXmlFiles(); // Primero cachear los XML
-            GenerateAnimations(); // Las animaciones no dependen de si es un icono
-            GenerateAssets();     // Luego generar TODOS los assets
-            CacheAssetImages();   // Y finalmente cachear las imágenes
+            CacheXmlFiles();
+            GenerateAnimations();
+            GenerateAssets();
+            CacheAssetImages();
         }
         
         private void CacheXmlFiles()
@@ -97,10 +99,7 @@ namespace Chroma
             _xmlCache["visualization"] = FileUtil.SolveXmlFile(XmlDirectory, "visualization");
         }
 
-        private XmlDocument? GetCachedXml(string name)
-        {
-            return _xmlCache.TryGetValue(name, out var doc) ? doc : null;
-        }
+        private XmlDocument? GetCachedXml(string name) => _xmlCache.TryGetValue(name, out var doc) ? doc : null;
         
         private void CacheAssetImages()
         {
@@ -134,15 +133,9 @@ namespace Chroma
                 string? imageName = assetNode.Attributes?["name"]?.InnerText;
                 if (string.IsNullOrEmpty(imageName)) continue;
 
-                // <-- ELIMINADO: Ya NO filtramos los iconos aquí. Todos los assets se cargan. -->
-                // if (!IsIcon && imageName.Contains("_icon_")) continue;
-                // if (IsIcon && !imageName.Contains("_icon_")) continue;
-
                 string? source = assetNode.Attributes?["source"]?.InnerText;
                 var chromaAsset = new ChromaAsset(this, x, y, source, imageName);
 
-                // IMPORTANTE: asset.Parse ahora recibe el XML para obtener propiedades del asset
-                // y determinará si es un icono o no por su nombre de imagen.
                 if (chromaAsset.Parse(visualizationXml)) 
                 {
                     chromaAsset.flipH = assetNode.Attributes?["flipH"]?.InnerText == "1";
@@ -153,21 +146,14 @@ namespace Chroma
             HighestAnimationLayer = Assets.Count > 0 ? Assets.Max(x => x.Layer) + 1 : 0;
         }
 
-        // --- NUEVO: Método para obtener el código de color de una capa en tiempo de renderizado ---
         private string? GetLayerColorCode(int layerId)
         {
-            if (ColourId == -1) return null; // No hay color especificado (ID -1), no aplicar color.
-
-            var xmlData = GetCachedXml("visualization"); // Usar el XML de visualización cacheado
+            if (ColourId == -1) return null;
+            var xmlData = GetCachedXml("visualization");
             if (xmlData == null) return null;
-
-            // Determinar el tamaño de visualización correcto para la búsqueda de color (1 para iconos, 32/64 para otros)
             string sizeForColorLookup = IsIcon ? "1" : (IsSmallFurni ? "32" : "64");
-
-            // Construir la consulta XPath para encontrar la capa de color específica para el ColourId y layerId actuales
             var colorNode = xmlData.SelectSingleNode($"//visualizationData/visualization[@size='{sizeForColorLookup}']/colors/color[@id='{ColourId}']/colorLayer[@id='{layerId}']");
-            
-            return colorNode?.Attributes?["color"]?.InnerText; // Retornar el código de color
+            return colorNode?.Attributes?["color"]?.InnerText;
         }
 
 
@@ -175,99 +161,97 @@ namespace Chroma
         private List<ChromaAsset> CreateBuildQueue()
         {
             if (RenderState > MaxStates) RenderState = 0;
-
-            // <-- CAMBIO CRÍTICO: Filtrar assets AQUI, basado en si queremos un icono o un furni normal. -->
-            // Los assets de icono se distinguen por su propiedad IsIconAsset.
             var candidates = Assets.Where(x => 
                 x.IsSmall == IsSmallFurni && 
-                (IsIcon ? x.IsIconAsset : !x.IsIconAsset) // Si IsIcon es true, solo assets de icono. Si es false, solo no-iconos.
+                (IsIcon ? x.IsIconAsset : !x.IsIconAsset)
             ).ToList();
 
             var renderFrames = new List<ChromaAsset>();
             for (int layer = 0; layer < this.HighestAnimationLayer; layer++)
             {
                 int frameId = 0;
-                // Si estamos renderizando un icono, el frame siempre es 0, no se buscan animaciones.
                 if (!IsIcon && Animations.ContainsKey(layer) && Animations[layer].States.ContainsKey(RenderState) && Animations[layer].States[RenderState].Frames.Any())
                 {
                     frameId = int.Parse(Animations[layer].States[RenderState].Frames[0]);
                 }
                 
-                // Ahora, de los candidatos correctos, filtramos por Dirección y Frame.
                 var assetsForLayer = candidates.Where(a => 
                     a.Layer == layer && 
-                    a.Direction == RenderDirection && // Esto permite renderizar iconos con Direction=0 y furnis con la dirección deseada.
+                    a.Direction == RenderDirection &&
                     a.Frame == frameId && 
                     !a.Shadow
                 );
 
-                if (!this.RenderShadows)
-                {
-                    assetsForLayer = assetsForLayer.Where(a => !a.IgnoreMouse);
-                }
-
+                if (!this.RenderShadows) assetsForLayer = assetsForLayer.Where(a => !a.IgnoreMouse);
                 renderFrames.AddRange(assetsForLayer);
             }
 
-            if (this.RenderShadows)
-            {
-                // Las sombras también deben ser de los candidatos correctos (icono vs no-icono)
-                renderFrames.AddRange(candidates.Where(a => a.Shadow));
-            }
-
+            if (this.RenderShadows) renderFrames.AddRange(candidates.Where(a => a.Shadow));
             return renderFrames.OrderBy(x => x.Z).ToList();
         }
 
-        public byte[]? CreateImage()
+        public RenderResult? CreateImage()
         {
-            using var image = RenderSingleFrame();
-            return image?.ToByteArray();
+            var (image, offset) = RenderSingleFrame();
+            if (image == null) return null;
+
+            using (image)
+            {
+                return new RenderResult
+                {
+                    ImageData = image.ToByteArray(),
+                    Offset = offset
+                };
+            }
         }
 
-        private Image<Rgba32>? RenderSingleFrame()
+        private (Image<Rgba32>?, Point) RenderSingleFrame()
         {
             var buildQueue = CreateBuildQueue();
-            if (buildQueue == null || buildQueue.Count == 0) return null;
+            if (buildQueue == null || buildQueue.Count == 0) return (null, Point.Empty);
 
             var origin = new Point(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
             using var canvas = new Image<Rgba32>(CANVAS_WIDTH, CANVAS_HEIGHT);
 
             foreach (var asset in buildQueue)
             {
-                // Obtener la imagen desde la caché
                 if (!_imageCache.TryGetValue(asset.imageName, out var sourceImage)) continue;
-
-                // Clonar la imagen cacheada para poder mutarla sin afectar al original
                 using (var image = sourceImage.Clone())
                 {
                     int finalRelativeX = asset.RelativeX;
                     if (asset.flipH) { finalRelativeX = image.Width - asset.RelativeX; }
-
                     var location = new Point(origin.X - finalRelativeX, origin.Y - asset.RelativeY);
-
-                    // Aplicar alpha si existe en la capa
                     if (asset.Alpha != -1) TintImage(image, "FFFFFF", (byte)asset.Alpha);
-                    
-                    // <-- CRÍTICO: Obtener ColourCode aquí, en tiempo de renderizado -->
                     string? currentColourCode = GetLayerColorCode(asset.Layer);
                     if (currentColourCode != null) TintImage(image, currentColourCode, 255);
-                    
-                    // Aplicar sombra si es necesario
                     if (asset.Shadow) image.Mutate(ctx => ctx.Opacity(0.4f));
-
                     var blendMode = (asset.Ink == "ADD" || asset.Ink == "33") ? PixelColorBlendingMode.Add : PixelColorBlendingMode.Normal;
                     var options = new DrawingOptions { GraphicsOptions = { ColorBlendingMode = blendMode } };
                     canvas.Mutate(ctx => ctx.DrawImage(image, location, options.GraphicsOptions));
                 }
             }
 
-            var finalImage = CropImage ? ImageUtil.TrimImage(canvas, Color.Transparent) : canvas.Clone();
-            return finalImage;
+            Point finalOffset = Point.Empty;
+            Image<Rgba32>? finalImage;
+
+            if (CropImage)
+            {
+                var (trimmedImage, trimRect) = ImageUtil.TrimImage(canvas, Color.Transparent);
+                finalImage = trimmedImage;
+                // El nuevo origen es la posición del viejo origen menos lo que se recortó de la izquierda y arriba
+                finalOffset = new Point(origin.X - trimRect.X, origin.Y - trimRect.Y);
+            }
+            else
+            {
+                finalImage = canvas.Clone();
+                finalOffset = origin; // Si no se recorta, el offset es el origen original
+            }
+
+            return (finalImage, finalOffset);
         }
 
-        // --- LÓGICA DE ANIMACIÓN (ACTUALIZADA) ---
-        // Estos métodos usan RenderAnimationFrame, que ya tiene el fix, pero el CreateBuildQueueForAnimationFrame
-        // también debe reflejar los cambios en el filtrado de assets.
+        // --- LÓGICA DE ANIMACIÓN (SIN CAMBIOS, PERO NECESITARÍA MODIFICACIONES SIMILARES PARA POSICIONAR GIFS) ---
+        // ... (resto de la clase sin cambios) ...
 
         public void GenerateAnimationFrames(string baseFilename, string furniName)
         {
@@ -359,10 +343,9 @@ namespace Chroma
 
         private List<ChromaAsset> CreateBuildQueueForAnimationFrame(int timelineIndex, int animationId)
         {
-            // <-- CAMBIO CRÍTICO: Filtrar assets AQUI también, basado en si queremos un icono o un furni normal. -->
             var candidates = Assets.Where(x => 
                 x.IsSmall == IsSmallFurni && 
-                (IsIcon ? x.IsIconAsset : !x.IsIconAsset) // Si IsIcon es true, solo assets de icono. Si es false, solo no-iconos.
+                (IsIcon ? x.IsIconAsset : !x.IsIconAsset)
             ).ToList();
             var renderFrames = new List<ChromaAsset>();
 
@@ -370,7 +353,6 @@ namespace Chroma
             {
                 int assetFrameId = 0;
 
-                // Si estamos renderizando un icono, el frame siempre es 0, no se buscan animaciones.
                 if (!IsIcon && Animations.ContainsKey(layer)) 
                 {
                     var layerAnimations = Animations[layer];
@@ -389,7 +371,6 @@ namespace Chroma
                     }
                 }
                 
-                // Ahora, de los candidatos correctos, filtramos por Dirección y Frame.
                 var assetsForLayer = candidates.Where(a => 
                     a.Layer == layer && 
                     a.Direction == RenderDirection && 
@@ -438,7 +419,6 @@ namespace Chroma
                     var location = new Point(origin.X - finalRelativeX, origin.Y - asset.RelativeY);
                     if (asset.Alpha != -1) TintImage(image, "FFFFFF", (byte)asset.Alpha);
                     
-                    // <-- CRÍTICO: Obtener ColourCode aquí, en tiempo de renderizado -->
                     string? currentColourCode = GetLayerColorCode(asset.Layer);
                     if (currentColourCode != null) TintImage(image, currentColourCode, 255);
                     
@@ -449,7 +429,12 @@ namespace Chroma
                 }
             }
             
-            return trim ? ImageUtil.TrimImage(canvas, Color.Transparent) : canvas.Clone();
+            if(trim)
+            {
+                var (trimmed, _) = ImageUtil.TrimImage(canvas, Color.Transparent);
+                return trimmed;
+            }
+            return canvas.Clone();
         }
 
         private Rectangle FindBoundingBox(Image<Rgba32> image, Rgba32 trimColor)

@@ -7,10 +7,12 @@ namespace Chroma
 {
     public static class ImageUtil
     {
-        public static Image<Rgba32> TrimImage(Image<Rgba32> image, params Rgba32[] trimColors)
+        // CAMBIO: El método ahora devuelve una tupla con la imagen y el rectángulo de recorte.
+        public static (Image<Rgba32> Image, Rectangle TrimRectangle) TrimImage(Image<Rgba32> image, params Rgba32[] trimColors)
         {
             int top = 0, bottom = image.Height - 1, left = 0, right = image.Width - 1;
             bool stop;
+            bool foundPixel = false; // Añadir flag para manejar imágenes completamente transparentes
 
             // Find top
             stop = false;
@@ -22,10 +24,17 @@ namespace Chroma
                     {
                         top = y;
                         stop = true;
+                        foundPixel = true;
                         break;
                     }
                 }
                 if (stop) break;
+            }
+
+            // Si no se encontraron píxeles, devolver una imagen de 1x1 y un rect por defecto
+            if (!foundPixel)
+            {
+                return (new Image<Rgba32>(1, 1), new Rectangle(0, 0, 1, 1));
             }
 
             // Find bottom
@@ -79,10 +88,11 @@ namespace Chroma
             int width = right - left + 1;
             int height = bottom - top + 1;
 
-            if (width <= 0 || height <= 0) return new Image<Rgba32>(1, 1); // Devuelve imagen vacía si todo se recorta
-
-            var clone = image.Clone(ctx => ctx.Crop(new Rectangle(left, top, width, height)));
-            return clone;
+            var trimRect = new Rectangle(left, top, width, height);
+            var clone = image.Clone(ctx => ctx.Crop(trimRect));
+            
+            // Devolver tanto la imagen clonada como el rectángulo usado
+            return (clone, trimRect);
         }
     }
 }

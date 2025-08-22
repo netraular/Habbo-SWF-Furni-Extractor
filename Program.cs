@@ -2,11 +2,14 @@
 using System.Diagnostics;
 using Chroma;
 using System.Threading.Tasks;
+using Newtonsoft.Json; // Añadir esto
+using SixLabors.ImageSharp; // Añadir esto para la clase Point
 
 namespace SimpleExtractor
 {
     class Program
     {
+        // ... Main y ShowHelp sin cambios ...
         static void Main(string[] args)
         {
             bool isSequential = false;
@@ -62,13 +65,15 @@ namespace SimpleExtractor
             Logger.Info($"\n¡Proceso completado en {stopwatch.Elapsed.TotalSeconds:F2} segundos!");
             Logger.Info($"Los archivos extraídos se encuentran en la carpeta '{outputDirectory}'.");
         }
-
-        // <-- CAMBIO: Lógica completamente reestructurada para ser más eficiente -->
+        
         private static void ProcessSingleSwf(string swfFile)
         {
             string furniName = Path.GetFileNameWithoutExtension(swfFile);
             string furniOutputDirectory = Path.Combine("output", furniName);
             ChromaFurniture? masterFurniture = null;
+
+            // NUEVO: Diccionario para guardar los offsets de renderizado
+            var renderOffsets = new Dictionary<string, Point>();
 
             try
             {
@@ -78,84 +83,88 @@ namespace SimpleExtractor
                     throw new Exception("Fallo la extracción inicial de assets y XML.");
                 }
                 
-                // Creamos UNA SOLA instancia que cargará y cacheará todo
                 masterFurniture = new ChromaFurniture(swfFile, isSmallFurni: false, renderState: 0, renderDirection: 0);
-                masterFurniture.Run(); // Carga y cachea XMLs, assets e imágenes
+                masterFurniture.Run();
 
                 var availableColorIds = masterFurniture.GetAvailableColorIds();
-                if (!availableColorIds.Any()) availableColorIds.Add(-1); // Añadir el color por defecto si no hay otros
+                if (!availableColorIds.Any()) availableColorIds.Add(-1);
 
                 foreach (int colorId in availableColorIds)
                 {
                     if (colorId > -1) Logger.Log($"   [{furniName}] --- Procesando Color ID: {colorId} ---");
 
-                    // Bucle para renderizar con y sin sombras
                     foreach (bool renderWithShadows in new[] { true, false })
                     {
                         Logger.Log($"      [{furniName}] --- Procesando Sombra: {(renderWithShadows ? "Sí" : "No")} ---");
 
-                        // Fase 2: Renderizado estático
-                        Logger.Log($"      [{furniName}] Fase 2: Renderizando imágenes estáticas...");
                         string renderedDir = Path.Combine(furniOutputDirectory, "rendered");
                         Directory.CreateDirectory(renderedDir);
                         int[] directionsToRender = { 0, 2, 4, 6 };
 
                         foreach (int direction in directionsToRender)
                         {
-                            // Reutilizamos la instancia maestra, solo cambiamos sus propiedades
                             masterFurniture.RenderDirection = direction;
                             masterFurniture.ColourId = colorId;
                             masterFurniture.RenderShadows = renderWithShadows;
                             masterFurniture.IsIcon = false;
                             
-                            byte[]? imageData = masterFurniture.CreateImage();
-                            if (imageData != null)
+                            // CAMBIO: Usar el nuevo método CreateImage que devuelve RenderResult
+                            RenderResult? renderResult = masterFurniture.CreateImage();
+                            if (renderResult?.ImageData != null)
                             {
-                                string filename = $"{furniName}_dir_{direction}";
-                                if (colorId > -1) filename += $"_{colorId}";
-                                if (!renderWithShadows) filename += "_no_sd";
-                                File.WriteAllBytes(Path.Combine(renderedDir, filename + ".png"), imageData);
+                                string filenameBase = $"{furniName}_dir_{direction}";
+                                if (colorId > -1) filenameBase += $"_{colorId}";
+                                if (!renderWithShadows) filenameBase += "_no_sd";
+                                string filename = filenameBase + ".png";
+
+                                File.WriteAllBytes(Path.Combine(renderedDir, filename), renderResult.ImageData);
+                                
+                                // Guardar el offset en nuestro diccionario
+                                renderOffsets[filenameBase] = renderResult.Offset;
                             }
                         }
-
-                        // Fase 3: Animaciones
-                        Logger.Log($"      [{furniName}] Fase 3: Buscando y generando animaciones...");
+                        
+                        // Lógica de animación sin cambios, no se guarda su offset por ahora.
                         string animationDir = Path.Combine(furniOutputDirectory, "animations");
                         Directory.CreateDirectory(animationDir);
-                        
-                        // Reutilizamos la instancia, ajustando a una dirección estándar para la animación
                         masterFurniture.RenderDirection = 2;
                         masterFurniture.ColourId = colorId;
                         masterFurniture.RenderShadows = renderWithShadows;
                         masterFurniture.IsIcon = false;
-
                         string gifFilenameBase = $"{furniName}_animation";
                         if (colorId > -1) gifFilenameBase += $"_{colorId}";
                         if (!renderWithShadows) gifFilenameBase += "_no_sd";
                         string gifFullPath = Path.Combine(animationDir, gifFilenameBase + ".gif");
-
                         masterFurniture.GenerateAnimationGif(gifFullPath, furniName); 
                         masterFurniture.GenerateAnimationFrames(gifFullPath, furniName);
                     }
 
-                    // Fase 4: Icono (fuera del bucle de sombras, ya que siempre es sin sombra)
                     Logger.Log($"   [{furniName}] Fase 4: Renderizando icono para color ID: {colorId}...");
                     
-                    // Reutilizamos la instancia para el icono
                     masterFurniture.IsIcon = true;
-                    masterFurniture.RenderDirection = 0; // Dirección estándar para iconos
+                    masterFurniture.RenderDirection = 0;
                     masterFurniture.ColourId = colorId;
-                    masterFurniture.RenderShadows = false; // Iconos nunca tienen sombra
+                    masterFurniture.RenderShadows = false;
 
-                    byte[]? iconData = masterFurniture.CreateImage();
-                    if (iconData != null)
+                    // CAMBIO: Guardar el offset del icono también
+                    RenderResult? iconResult = masterFurniture.CreateImage();
+                    if (iconResult?.ImageData != null)
                     {
-                        string iconFilename = $"{furniName}_icon";
-                        if (colorId > -1) iconFilename += $"_{colorId}";
-                        File.WriteAllBytes(Path.Combine(furniOutputDirectory, iconFilename + ".png"), iconData);
+                        string iconFilenameBase = $"{furniName}_icon";
+                        if (colorId > -1) iconFilenameBase += $"_{colorId}";
+                        string iconFilename = iconFilenameBase + ".png";
+                        File.WriteAllBytes(Path.Combine(furniOutputDirectory, iconFilename), iconResult.ImageData);
+                        
+                        renderOffsets[iconFilenameBase] = iconResult.Offset;
                     }
                 }
                 
+                // NUEVO: Al final, guardar todos los offsets a un archivo JSON
+                string renderDataPath = Path.Combine(furniOutputDirectory, "renderdata.json");
+                string json = JsonConvert.SerializeObject(renderOffsets, Newtonsoft.Json.Formatting.Indented);
+                File.WriteAllText(renderDataPath, json);
+                Logger.Log($"      [{furniName}] Datos de renderizado guardados en renderdata.json");
+
                 Logger.Info($"   -> ¡{furniName} completado con éxito!");
             }
             catch (Exception ex)
@@ -166,7 +175,6 @@ namespace SimpleExtractor
             }
             finally
             {
-                // <-- CAMBIO: Liberamos los recursos de la instancia maestra -->
                 masterFurniture?.Dispose();
             }
         }
