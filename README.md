@@ -28,7 +28,6 @@ Follow these instructions to get the project up and running on your local machin
 ### Prerequisites
 
 -   [.NET 6.0 SDK](https://dotnet.microsoft.com/download/dotnet/6.0) or higher.
--   `Flazzy.dll` library. This project is configured to look for it in a `LIB/` folder.
 
 ### Setup
 
@@ -38,46 +37,54 @@ Follow these instructions to get the project up and running on your local machin
     cd SimpleExtractor
     ```
 
-2.  **Add Dependencies:**
-    -   Create a folder named `LIB` in the root of the project directory.
-    -   Place your `Flazzy.dll` file inside the `LIB` folder.
-
-3.  **Add Furniture Files:**
-    -   Create a folder named `swfs` in the root of the project directory.
-    -   Place all your `.swf` furniture files inside the `swfs` folder.
-
-4.  **Build the project:**
-    ```sh
-    dotnet build -c Release
-    ```
+2.  **Add Furniture Files:**
+    -   By default, the application looks for a folder named `swfs` in the root of the project directory. Place your `.swf` files here.
+    -   Alternatively, you can specify any input directory using the `--input` command-line option.
 
 ## Usage
 
-Run the application from your terminal in the project's root directory. The extracted files will be placed in the `output` folder.
+You can run the application directly from the source code using the `dotnet run` command. This command will automatically compile and run the project in one step. The extracted files will be placed in the `output` folder by default.
 
 ```sh
-# Run with default parallel processing
+# Run with default settings (input: ./swfs, output: ./output)
+# The --project flag is recommended when running from the root directory.
 dotnet run --project SimpleExtractor.csproj
 
 # Run with detailed logging
 dotnet run --project SimpleExtractor.csproj --verbose
 
-# Run sequentially (one file at a time) for easier debugging
-dotnet run --project SimpleExtractor.csproj --sequential
+# Specify custom input and output directories
+dotnet run --project SimpleExtractor.csproj --input C:\MySwfs --output D:\ExtractedData
+
+# Use short aliases for custom directories and verbose logging
+dotnet run --project SimpleExtractor.csproj -i ./path/to/swfs -o ./path/to/output --verbose
 ```
 
 ### Command-Line Options
 
+-   `-i, --input <path>`: Specifies the directory to read `.swf` files from. Defaults to `./swfs`.
+-   `-o, --output <path>`: Specifies the root directory for all extracted files and folders. Defaults to `./output`.
 -   `--verbose`: Displays all detailed logs during the extraction and rendering process. By default, only summary information is shown.
 -   `--sequential`: Disables parallel processing and processes SWF files one by one. Useful for debugging or if mixed-up console logs are an issue.
 -   `--help`: Shows the help message with all available options.
 
+### Building a Standalone Executable (Optional)
+
+If you prefer to compile the application into an executable file instead of using `dotnet run` each time, you can use the `dotnet build` command.
+
+```sh
+# Build a release version of the application
+dotnet build -c Release
+```
+
+After building, you can find the executable in the `SimpleExtractor/bin/Release/net6.0/` directory and run it from there.
+
 ## Output Structure
 
-For each `.swf` file processed, a corresponding folder is created in the `output` directory. This folder contains all the extracted and generated assets in an organized structure, resembling the following:
+For each `.swf` file processed, a corresponding folder is created in the specified output directory (which defaults to `output`). This folder contains all the extracted and generated assets in an organized structure:
 
 ```
-📂 output/
+📂 [output_directory]/
 └── 📂 [furni_name]/
     ├── 📂 assets/
     │   └── 🖼️ [furni_name]_32_a_0_0.png
@@ -87,8 +94,7 @@ For each `.swf` file processed, a corresponding folder is created in the `output
     │   │   └── 🖼️ [furni_name]_animation_frame_00.png
     │   │   └── ... (individual animation frames)
     │   ├── 🎬 [furni_name]_animation.gif
-    │   ├── 🎬 [furni_name]_animation_1.gif
-    │   └── ... (all animated gifs)
+    │   └── ... (all animated gifs with color/shadow variations)
     ├── 📂 rendered/
     │   ├── 🖼️ [furni_name]_dir_0.png
     │   ├── 🖼️ [furni_name]_dir_0_no_sd.png
@@ -98,8 +104,8 @@ For each `.swf` file processed, a corresponding folder is created in the `output
     │   ├── 📄 logic.xml
     │   └── 📄 visualization.xml
     ├── 📄 furni.json
-    ├── 🖼️ [furni_name]_icon.png
-    └── 🖼️ [furni_name]_icon_color_1.png
+    ├── 📄 renderdata.json
+    └── 🖼️ [furni_name]_icon.png
     └── ... (all icons, with color variations)
 ```
 
@@ -108,6 +114,7 @@ For each `.swf` file processed, a corresponding folder is created in the `output
 -   **`rendered/`**: Contains the final composed static PNG images for different directions, colors, and shadow options.
 -   **`animations/`**: Contains the generated animated GIFs and a `frames/` subfolder with each frame saved as a separate PNG.
 -   **`furni.json`**: A single, consolidated JSON file containing all logic, visualization, and asset data in a structured format.
+-   **`renderdata.json`**: Contains the calculated X and Y offsets for each rendered static image and icon, useful for correct placement in a client.
 -   **`*_icon.png`**: The generated icon for the furniture, including color variations.
 
 ## Acknowledgements

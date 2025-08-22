@@ -1,4 +1,4 @@
-// Ruta: SimpleExtractor/FurniExtractor.cs
+// Path: SimpleExtractor/FurniExtractor.cs
 using Flazzy;
 using Flazzy.Tags;
 using SixLabors.ImageSharp;
@@ -9,7 +9,7 @@ using System.Xml;
 using SimpleExtractor.Json;
 using Newtonsoft.Json;
 using System.Linq;
-using System.Globalization; // Necesario para parsear floats correctamente
+using System.Globalization; // Needed to parse floats correctly
 
 namespace SimpleExtractor
 {
@@ -36,9 +36,8 @@ namespace SimpleExtractor
                 symbolsMap.TryAdd(symbolClass.Ids[i], symbolClass.Names[i]);
             }
 
-            // --- FASE 1: Extraer datos binarios (XML) ---
-            // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
-            Logger.Log($"      [{furniName}] Extrayendo datos binarios (XML)...");
+            // --- PHASE 1: Extract binary data (XML) ---
+            Logger.Log($"      [{furniName}] Extracting binary data (XML)...");
             var dataTags = flash.Tags.Where(t => t.Kind == TagKind.DefineBinaryData).Cast<DefineBinaryDataTag>();
             foreach (var data in dataTags)
             {
@@ -58,9 +57,8 @@ namespace SimpleExtractor
                 }
             }
 
-            // --- FASE 2: Extraer imágenes ---
-            // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
-            Logger.Log($"      [{furniName}] Extrayendo imágenes...");
+            // --- PHASE 2: Extract images ---
+            Logger.Log($"      [{furniName}] Extracting images...");
             var imageTags = flash.Tags.Where(t => t.Kind == TagKind.DefineBitsLossless2).Cast<DefineBitsLossless2Tag>();
             var symbolsImages = imageTags.ToDictionary(img => img.Id);
             foreach (var entry in symbolsMap)
@@ -70,9 +68,8 @@ namespace SimpleExtractor
                 WriteImage(symbolsImages[entry.Key], imagePath);
             }
 
-            // --- FASE 3: Post-procesar assets ---
-            // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
-            Logger.Log($"      [{furniName}] Post-procesando assets...");
+            // --- PHASE 3: Post-process assets ---
+            Logger.Log($"      [{furniName}] Post-processing assets...");
             var assetsXmlPath = Path.Combine(xmlDirectory, "assets.xml");
             if (File.Exists(assetsXmlPath))
             {
@@ -102,9 +99,8 @@ namespace SimpleExtractor
                 }
             }
 
-            // --- FASE 4: Generar furni.json a partir de los XML ---
-            // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
-            Logger.Log($"      [{furniName}] Generando furni.json...");
+            // --- PHASE 4: Generate furni.json from XML files ---
+            Logger.Log($"      [{furniName}] Generating furni.json...");
             GenerateFurniJson(furniName, outputFurniDirectory, xmlDirectory);
 
             return true;
@@ -120,7 +116,7 @@ namespace SimpleExtractor
                 Visualization = new JsonVisualizationData()
             };
 
-            // ... (Lógica de parseo XML sin cambios) ...
+            // Parse assets.xml
             var assetsDoc = Chroma.FileUtil.SolveXmlFile(xmlDir, "assets");
             if (assetsDoc != null)
             {
@@ -294,8 +290,7 @@ namespace SimpleExtractor
             var jsonSettings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore, Formatting = Newtonsoft.Json.Formatting.Indented };
             string json = JsonConvert.SerializeObject(furniData, jsonSettings);
             File.WriteAllText(Path.Combine(outputDir, "furni.json"), json);
-            // <-- CAMBIO: Reemplazado Console.WriteLine por Logger.Log -->
-            Logger.Log($"         -> [{furniName}] Archivo furni.json generado correctamente.");
+            Logger.Log($"         -> [{furniName}] furni.json file generated successfully.");
         }
         
         private static JsonLayer ParseJsonLayer(XmlNode layerNode)

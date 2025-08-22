@@ -1,4 +1,4 @@
-// Ruta: SimpleExtractor/Chroma/ChromaFurniture.cs
+// Path: SimpleExtractor/Chroma/ChromaFurniture.cs
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -14,7 +14,7 @@ using SixLabors.ImageSharp.Formats.Gif;
 
 namespace Chroma
 {
-    // NUEVA CLASE PARA DEVOLVER LOS DATOS DEL RENDERIZADO
+    // Class to return rendering data
     public class RenderResult
     {
         public byte[]? ImageData { get; set; }
@@ -23,8 +23,9 @@ namespace Chroma
 
     public class ChromaFurniture : IDisposable
     {
-        // --- PROPIEDADES (SIN CAMBIOS) ---
-        private string fileName;
+        // --- PROPERTIES ---
+        private readonly string _fileName;
+        private readonly string _baseOutputDirectory;
         public bool IsSmallFurni { get; set; }
         public int RenderState { get; set; }
         public int RenderDirection { get; set; }
@@ -40,7 +41,7 @@ namespace Chroma
         public SortedDictionary<int, ChromaAnimation> Animations;
         public int HighestAnimationLayer;
         public int MaxStates { get; private set; }
-        public string OutputDirectory => Path.Combine("output", Sprite);
+        public string OutputDirectory => Path.Combine(_baseOutputDirectory, Sprite);
         public string OutputAssetsDirectory => Path.Combine(OutputDirectory, "assets");
         public string XmlDirectory => Path.Combine(OutputDirectory, "xml");
 
@@ -48,10 +49,11 @@ namespace Chroma
         private readonly Dictionary<string, Image<Rgba32>> _imageCache = new();
 
 
-        // --- CONSTRUCTOR Y MÉTODOS DE INICIALIZACIÓN (SIN CAMBIOS) ---
-        public ChromaFurniture(string inputFileName, bool isSmallFurni, int renderState, int renderDirection, int colourId = -1, bool isIcon = false, bool renderShadows = true)
+        // --- CONSTRUCTOR & INITIALIZATION METHODS ---
+        public ChromaFurniture(string inputFileName, string baseOutputDirectory, bool isSmallFurni, int renderState, int renderDirection, int colourId = -1, bool isIcon = false, bool renderShadows = true)
         {
-            this.fileName = inputFileName;
+            this._fileName = inputFileName;
+            this._baseOutputDirectory = baseOutputDirectory;
             this.IsSmallFurni = isSmallFurni;
             this.Assets = new List<ChromaAsset>();
             this.RenderState = renderState;
@@ -157,7 +159,7 @@ namespace Chroma
         }
 
 
-        // --- MÉTODOS DE RENDERIZADO ESTÁTICO (ACTUALIZADOS) ---
+        // --- STATIC RENDERING METHODS ---
         private List<ChromaAsset> CreateBuildQueue()
         {
             if (RenderState > MaxStates) RenderState = 0;
@@ -238,21 +240,19 @@ namespace Chroma
             {
                 var (trimmedImage, trimRect) = ImageUtil.TrimImage(canvas, Color.Transparent);
                 finalImage = trimmedImage;
-                // El nuevo origen es la posición del viejo origen menos lo que se recortó de la izquierda y arriba
+                // The new origin is the old origin's position minus what was cropped from the left and top
                 finalOffset = new Point(origin.X - trimRect.X, origin.Y - trimRect.Y);
             }
             else
             {
                 finalImage = canvas.Clone();
-                finalOffset = origin; // Si no se recorta, el offset es el origen original
+                finalOffset = origin; // If not cropped, the offset is the original origin
             }
 
             return (finalImage, finalOffset);
         }
 
-        // --- LÓGICA DE ANIMACIÓN (SIN CAMBIOS, PERO NECESITARÍA MODIFICACIONES SIMILARES PARA POSICIONAR GIFS) ---
-        // ... (resto de la clase sin cambios) ...
-
+        // --- ANIMATION LOGIC ---
         public void GenerateAnimationFrames(string baseFilename, string furniName)
         {
             var bestAnimationState = Animations.Values.SelectMany(anim => anim.States).OrderByDescending(state => state.Value.Frames.Count).FirstOrDefault();
@@ -267,7 +267,7 @@ namespace Chroma
             string frameDir = Path.Combine(Path.GetDirectoryName(baseFilename)!, "frames");
             Directory.CreateDirectory(frameDir);
 
-            SimpleExtractor.Logger.Log($"         -> [{furniName}] Guardando frames individuales en: {frameDir}");
+            SimpleExtractor.Logger.Log($"         -> [{furniName}] Saving individual frames to: {frameDir}");
 
             for (int i = 0; i < animationSequence.Count; i++)
             {
@@ -285,7 +285,7 @@ namespace Chroma
             var bestAnimationState = Animations.Values.SelectMany(anim => anim.States).OrderByDescending(state => state.Value.Frames.Count).FirstOrDefault();
             if (bestAnimationState.Value == null || bestAnimationState.Value.Frames.Count <= 1)
             {
-                SimpleExtractor.Logger.Log($"         -> [{furniName}] No tiene secuencias de animación válidas.");
+                SimpleExtractor.Logger.Log($"         -> [{furniName}] Does not have valid animation sequences.");
                 return;
             }
 
@@ -294,7 +294,7 @@ namespace Chroma
             int frameRepeat = bestAnimationState.Value.FramesPerSecond > 0 ? bestAnimationState.Value.FramesPerSecond : 4;
             int frameDelay = (int)Math.Round(frameRepeat * 4.16);
 
-            SimpleExtractor.Logger.Log($"         -> [{furniName}] Generando GIF desde anim. ID={animationId} con {animationSequence.Count} frames (velocidad: {frameRepeat})...");
+            SimpleExtractor.Logger.Log($"         -> [{furniName}] Generating GIF from anim. ID={animationId} with {animationSequence.Count} frames (speed: {frameRepeat})...");
             
             var fullSizeFrames = new List<Image<Rgba32>>();
             for (int i = 0; i < animationSequence.Count; i++)
@@ -305,7 +305,7 @@ namespace Chroma
 
             if (fullSizeFrames.Count < 2)
             {
-                SimpleExtractor.Logger.Log($"         -> [{furniName}] No se pudieron generar suficientes frames para la animación.");
+                SimpleExtractor.Logger.Log($"         -> [{furniName}] Could not generate enough frames for the animation.");
                 fullSizeFrames.ForEach(f => f.Dispose());
                 return;
             }
@@ -338,7 +338,7 @@ namespace Chroma
             }
 
             fullSizeFrames.ForEach(f => f.Dispose());
-            SimpleExtractor.Logger.Log($"            -> [{furniName}] GIF de animación guardado en: {Path.GetFileName(outputGifPath)}");
+            SimpleExtractor.Logger.Log($"            -> [{furniName}] Animation GIF saved to: {Path.GetFileName(outputGifPath)}");
         }
 
         private List<ChromaAsset> CreateBuildQueueForAnimationFrame(int timelineIndex, int animationId)

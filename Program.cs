@@ -1,35 +1,46 @@
-// Ruta: SimpleExtractor/Program.cs
+// Path: SimpleExtractor/Program.cs
 using System.Diagnostics;
 using Chroma;
 using System.Threading.Tasks;
-using Newtonsoft.Json; // Añadir esto
-using SixLabors.ImageSharp; // Añadir esto para la clase Point
+using Newtonsoft.Json;
+using SixLabors.ImageSharp;
 
 namespace SimpleExtractor
 {
     class Program
     {
-        // ... Main y ShowHelp sin cambios ...
         static void Main(string[] args)
         {
-            bool isSequential = false;
-
             if (args.Contains("--help"))
             {
                 ShowHelp();
                 return;
             }
+            
+            // --- Argument Parsing ---
             Logger.IsVerbose = args.Contains("--verbose");
-            isSequential = args.Contains("--sequential");
-
-
-            Logger.Info("Iniciando extractor avanzado de furnis...");
-            Logger.Log($" - Modo Verboso: {(Logger.IsVerbose ? "Activado" : "Desactivado")}");
-            Logger.Log($" - Modo Paralelo: {(!isSequential ? "Activado" : "Desactivado")}");
-
-
+            bool isSequential = args.Contains("--sequential");
             string inputDirectory = "swfs";
             string outputDirectory = "output";
+
+            for (int i = 0; i < args.Length; i++)
+            {
+                string arg = args[i].ToLower();
+                if ((arg == "--input" || arg == "-i") && i + 1 < args.Length)
+                {
+                    inputDirectory = args[i + 1];
+                }
+                else if ((arg == "--output" || arg == "-o") && i + 1 < args.Length)
+                {
+                    outputDirectory = args[i + 1];
+                }
+            }
+
+            Logger.Info("Starting advanced furni extractor...");
+            Logger.Log($" - Verbose Mode: {(Logger.IsVerbose ? "Enabled" : "Disabled")}");
+            Logger.Log($" - Parallel Mode: {(!isSequential ? "Enabled" : "Disabled")}");
+            Logger.Log($" - Input Directory: {inputDirectory}");
+            Logger.Log($" - Output Directory: {outputDirectory}");
 
             Directory.CreateDirectory(inputDirectory);
             Directory.CreateDirectory(outputDirectory);
@@ -37,53 +48,53 @@ namespace SimpleExtractor
             var swfFiles = Directory.GetFiles(inputDirectory, "*.swf");
             if (swfFiles.Length == 0)
             {
-                Logger.Info($"No se encontraron archivos .swf en la carpeta '{inputDirectory}'.");
+                Logger.Info($"No .swf files found in the '{inputDirectory}' folder.");
                 return;
             }
 
-            Logger.Info($"\nSe encontraron {swfFiles.Length} archivos .swf para procesar.");
+            Logger.Info($"\nFound {swfFiles.Length} .swf files to process.");
             var stopwatch = Stopwatch.StartNew();
 
             if (isSequential)
             {
-                Logger.Info("Ejecutando en modo secuencial...");
+                Logger.Info("Running in sequential mode...");
                 foreach (var swfFile in swfFiles)
                 {
-                    ProcessSingleSwf(swfFile);
+                    ProcessSingleSwf(swfFile, outputDirectory);
                 }
             }
             else
             {
-                Logger.Info("Ejecutando en modo paralelo...");
+                Logger.Info("Running in parallel mode...");
                 Parallel.ForEach(swfFiles, swfFile =>
                 {
-                    ProcessSingleSwf(swfFile);
+                    ProcessSingleSwf(swfFile, outputDirectory);
                 });
             }
 
             stopwatch.Stop();
-            Logger.Info($"\n¡Proceso completado en {stopwatch.Elapsed.TotalSeconds:F2} segundos!");
-            Logger.Info($"Los archivos extraídos se encuentran en la carpeta '{outputDirectory}'.");
+            Logger.Info($"\nProcess completed in {stopwatch.Elapsed.TotalSeconds:F2} seconds!");
+            Logger.Info($"Extracted files are located in the '{outputDirectory}' folder.");
         }
         
-        private static void ProcessSingleSwf(string swfFile)
+        private static void ProcessSingleSwf(string swfFile, string baseOutputDirectory)
         {
             string furniName = Path.GetFileNameWithoutExtension(swfFile);
-            string furniOutputDirectory = Path.Combine("output", furniName);
+            string furniOutputDirectory = Path.Combine(baseOutputDirectory, furniName);
             ChromaFurniture? masterFurniture = null;
 
-            // NUEVO: Diccionario para guardar los offsets de renderizado
+            // Dictionary to store rendering offsets
             var renderOffsets = new Dictionary<string, Point>();
 
             try
             {
-                Logger.Log($"   [{furniName}] Fase 1: Extrayendo assets y preparando datos...");
+                Logger.Log($"   [{furniName}] Phase 1: Extracting assets and preparing data...");
                 if (!FurniExtractor.Parse(swfFile, furniOutputDirectory))
                 {
-                    throw new Exception("Fallo la extracción inicial de assets y XML.");
+                    throw new Exception("Initial extraction of assets and XML failed.");
                 }
                 
-                masterFurniture = new ChromaFurniture(swfFile, isSmallFurni: false, renderState: 0, renderDirection: 0);
+                masterFurniture = new ChromaFurniture(swfFile, baseOutputDirectory, isSmallFurni: false, renderState: 0, renderDirection: 0);
                 masterFurniture.Run();
 
                 var availableColorIds = masterFurniture.GetAvailableColorIds();
@@ -91,11 +102,11 @@ namespace SimpleExtractor
 
                 foreach (int colorId in availableColorIds)
                 {
-                    if (colorId > -1) Logger.Log($"   [{furniName}] --- Procesando Color ID: {colorId} ---");
+                    if (colorId > -1) Logger.Log($"   [{furniName}] --- Processing Color ID: {colorId} ---");
 
                     foreach (bool renderWithShadows in new[] { true, false })
                     {
-                        Logger.Log($"      [{furniName}] --- Procesando Sombra: {(renderWithShadows ? "Sí" : "No")} ---");
+                        Logger.Log($"      [{furniName}] --- Processing Shadow: {(renderWithShadows ? "Yes" : "No")} ---");
 
                         string renderedDir = Path.Combine(furniOutputDirectory, "rendered");
                         Directory.CreateDirectory(renderedDir);
@@ -108,7 +119,6 @@ namespace SimpleExtractor
                             masterFurniture.RenderShadows = renderWithShadows;
                             masterFurniture.IsIcon = false;
                             
-                            // CAMBIO: Usar el nuevo método CreateImage que devuelve RenderResult
                             RenderResult? renderResult = masterFurniture.CreateImage();
                             if (renderResult?.ImageData != null)
                             {
@@ -119,12 +129,12 @@ namespace SimpleExtractor
 
                                 File.WriteAllBytes(Path.Combine(renderedDir, filename), renderResult.ImageData);
                                 
-                                // Guardar el offset en nuestro diccionario
+                                // Save the offset to our dictionary
                                 renderOffsets[filenameBase] = renderResult.Offset;
                             }
                         }
                         
-                        // Lógica de animación sin cambios, no se guarda su offset por ahora.
+                        // Animation logic remains, its offset is not saved for now.
                         string animationDir = Path.Combine(furniOutputDirectory, "animations");
                         Directory.CreateDirectory(animationDir);
                         masterFurniture.RenderDirection = 2;
@@ -139,14 +149,13 @@ namespace SimpleExtractor
                         masterFurniture.GenerateAnimationFrames(gifFullPath, furniName);
                     }
 
-                    Logger.Log($"   [{furniName}] Fase 4: Renderizando icono para color ID: {colorId}...");
+                    Logger.Log($"   [{furniName}] Phase 4: Rendering icon for color ID: {colorId}...");
                     
                     masterFurniture.IsIcon = true;
                     masterFurniture.RenderDirection = 0;
                     masterFurniture.ColourId = colorId;
                     masterFurniture.RenderShadows = false;
 
-                    // CAMBIO: Guardar el offset del icono también
                     RenderResult? iconResult = masterFurniture.CreateImage();
                     if (iconResult?.ImageData != null)
                     {
@@ -159,18 +168,18 @@ namespace SimpleExtractor
                     }
                 }
                 
-                // NUEVO: Al final, guardar todos los offsets a un archivo JSON
+                // At the end, save all offsets to a JSON file
                 string renderDataPath = Path.Combine(furniOutputDirectory, "renderdata.json");
                 string json = JsonConvert.SerializeObject(renderOffsets, Newtonsoft.Json.Formatting.Indented);
                 File.WriteAllText(renderDataPath, json);
-                Logger.Log($"      [{furniName}] Datos de renderizado guardados en renderdata.json");
+                Logger.Log($"      [{furniName}] Render data saved to renderdata.json");
 
-                Logger.Info($"   -> ¡{furniName} completado con éxito!");
+                Logger.Info($"   -> {furniName} completed successfully!");
             }
             catch (Exception ex)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
-                Logger.Info($"   -> Error al procesar el archivo {furniName}: {ex.Message}\n{ex.StackTrace}");
+                Logger.Info($"   -> Error processing file {furniName}: {ex.Message}\n{ex.StackTrace}");
                 Console.ResetColor();
             }
             finally
@@ -181,17 +190,21 @@ namespace SimpleExtractor
         
         private static void ShowHelp()
         {
-            Console.WriteLine("\nSimpleExtractor - Extractor Avanzado de Furnis");
-            Console.WriteLine("-------------------------------------------------");
-            Console.WriteLine("Uso: SimpleExtractor.exe [opciones]");
-            Console.WriteLine("\nOpciones:");
-            Console.WriteLine("  --verbose       Muestra todos los logs detallados del proceso de extracción.");
-            Console.WriteLine("                  Por defecto, solo se muestra el inicio y fin de cada archivo.");
-            Console.WriteLine("\n  --sequential    Desactiva el procesamiento en paralelo de los archivos SWF.");
-            Console.WriteLine("                  Útil para depurar o si los logs mezclados son un problema.");
-            Console.WriteLine("\n  --help          Muestra este mensaje de ayuda.");
-            Console.WriteLine("\nEjemplo de uso:");
-            Console.WriteLine("  SimpleExtractor.exe --verbose --sequential");
+            Console.WriteLine("\nSimpleExtractor - Advanced Furni Extractor");
+            Console.WriteLine("-------------------------------------------");
+            Console.WriteLine("Usage: SimpleExtractor.exe [options]");
+            Console.WriteLine("\nOptions:");
+            Console.WriteLine("  -i, --input <path>     Specifies the directory to read .swf files from.");
+            Console.WriteLine("                         (Default: ./swfs)");
+            Console.WriteLine("\n  -o, --output <path>    Specifies the root directory for all output files.");
+            Console.WriteLine("                         (Default: ./output)");
+            Console.WriteLine("\n  --verbose              Displays all detailed logs of the extraction process.");
+            Console.WriteLine("                         By default, only the start and end of each file is shown.");
+            Console.WriteLine("\n  --sequential           Disables parallel processing of SWF files.");
+            Console.WriteLine("                         Useful for debugging or if mixed logs are an issue.");
+            Console.WriteLine("\n  --help                 Displays this help message.");
+            Console.WriteLine("\nExample usage:");
+            Console.WriteLine("  SimpleExtractor.exe --input C:\\MySwfs --output D:\\Extracted --verbose");
         }
     }
 }
